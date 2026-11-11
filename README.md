@@ -1,4 +1,7 @@
-# Night Protein Count
+# Protein Count
+
+🔗 https://abisheksapkota-spec.github.io/GYG-ProteinCount/
+
 
 A one-hand closing stock count for kitchen cooks. Count six proteins in the cold room,
 let the app do the maths, and submit the report to the manager in about five minutes.
