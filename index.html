@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title data-keep>Night Protein Count</title>
+<meta data-keep name="claude:viewport-fit-sides" content="cover">
+<meta data-keep name="theme-color" content="#1c1a17">
+<link data-keep rel="preconnect" href="https://fonts.googleapis.com">
+<link data-keep rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link data-keep rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700;800&display=swap">
+<style data-keep>
+  /* Layout: menu-board header, one-hand flow: home (6 protein tiles + progress) -> protein (weigh & add containers) -> review -> submit. Action bar pinned to the thumb. */
+  :root {
+    --bg: #f3f2ee;
+    --card: #ffffff;
+    --ink: #1c1a17;
+    --muted: #6a665e;
+    --line: #e2dfd7;
+    --board: #1c1a17;
+    --board-ink: #fbf7ee;
+    --chilli: #d63a22;
+    --lime: #2e8b47;
+    --lime-ink: #ffffff;
+    --corn: #f2b632;
+    --warn-bg: #fdeee9;
+    --ok-bg: #e6f3ea;
+    --display: "Anton", "Impact", "Arial Narrow", sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #12110f; --card: #1d1b18; --ink: #f4f1ea; --muted: #a8a399; --line: #34312b;
+      --board: #0a0908; --board-ink: #fbf7ee; --chilli: #f2664d; --lime: #4cb96a; --lime-ink: #0b1a0f;
+      --corn: #f2b632; --warn-bg: #3a1f18; --ok-bg: #17301e;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #12110f; --card: #1d1b18; --ink: #f4f1ea; --muted: #a8a399; --line: #34312b;
+    --board: #0a0908; --board-ink: #fbf7ee; --chilli: #f2664d; --lime: #4cb96a; --lime-ink: #0b1a0f;
+    --corn: #f2b632; --warn-bg: #3a1f18; --ok-bg: #17301e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.45 var(--body); padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--board); }
+
+  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--board); color: var(--board-ink); }
+  .head-inner { max-width: 640px; margin: 0 auto; padding-block: 12px 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .brand { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font: 400 26px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; }
+  header h1 span { color: var(--corn); }
+  .clock { font-size: 13px; font-weight: 700; color: var(--corn); letter-spacing: .02em; }
+  nav { display: flex; gap: 4px; margin-top: 8px; }
+  nav button { flex: 1; border: 0; background: transparent; color: inherit; opacity: .6; cursor: pointer; font: 700 13px/1 var(--body); text-transform: uppercase; letter-spacing: .1em; padding: 12px 4px; border-bottom: 4px solid transparent; }
+  nav button.active { opacity: 1; border-bottom-color: var(--chilli); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--corn); outline-offset: 2px; }
+  .tape { height: 6px; background: repeating-linear-gradient(90deg, var(--chilli) 0 24px, var(--corn) 24px 48px, var(--lime) 48px 72px); }
+  .offline { background: var(--corn); color: #1c1a17; font: 700 13px/1.3 var(--body); text-align: center; padding: 6px 16px; }
+
+  main { max-width: 640px; margin: 0 auto; padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 12px; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  h2 { margin: 0; font: 400 24px/1.1 var(--display); text-transform: uppercase; letter-spacing: .02em; text-wrap: balance; }
+  .eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 0; }
+  .muted { color: var(--muted); font-size: 14px; margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  label { display: block; font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  input, select, textarea { width: 100%; margin-top: 5px; font: 500 16px/1.3 var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px 10px; }
+  textarea { min-height: 64px; resize: vertical; }
+
+  .btn { min-height: 52px; border-radius: 12px; border: 1px solid var(--line); cursor: pointer; padding: 0 16px; background: var(--card); color: var(--ink); font: 800 15px/1.1 var(--body); text-transform: uppercase; letter-spacing: .04em; touch-action: manipulation; }
+  .btn.primary { background: var(--chilli); border-color: var(--chilli); color: #fff; }
+  .btn.go { background: var(--lime); border-color: var(--lime); color: var(--lime-ink); }
+  .btn.ghost { background: transparent; }
+  .btn.danger { color: var(--chilli); }
+  .btn.small { min-height: 40px; font-size: 13px; padding: 0 12px; }
+  .btn.block { width: 100%; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .link { background: none; border: 0; padding: 8px 0; color: var(--muted); font: 700 14px var(--body); text-decoration: underline; cursor: pointer; }
+
+  /* Home */
+  .progress-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; align-items: center; }
+  .progress-big { font: 400 52px/1 var(--display); grid-row: span 2; }
+  .meter { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--lime); transition: width .25s; }
+  .tile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-left: 6px solid var(--line); border-radius: var(--radius); padding: 14px; min-height: 72px; }
+  .tile.done { border-left-color: var(--lime); }
+  .tile .t-name { font-weight: 800; font-size: 18px; grid-column: 1; }
+  .tile .t-sub { font-size: 13px; color: var(--muted); grid-column: 1; }
+  .tile .t-kg { font: 400 26px/1 var(--display); grid-row: 1 / span 2; grid-column: 2; text-align: right; }
+  .tile .t-kg small { font: 700 13px var(--body); color: var(--muted); }
+  .pill { display: inline-block; font: 800 11px/1 var(--body); text-transform: uppercase; letter-spacing: .08em; padding: 5px 8px; border-radius: 999px; vertical-align: 2px; margin-left: 6px; }
+  .pill.pending { background: var(--warn-bg); color: var(--chilli); }
+  .pill.ok { background: var(--ok-bg); color: var(--lime); }
+  .sum-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .sum-big { font: 400 34px/1 var(--display); }
+
+  /* Protein screen */
+  .back { display: flex; justify-content: space-between; align-items: center; }
+  .p-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .p-total { font: 400 40px/1 var(--display); white-space: nowrap; }
+  .p-total small { font: 700 15px var(--body); color: var(--muted); margin-left: 3px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg button { min-height: 46px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: 800 14px var(--body); text-transform: uppercase; letter-spacing: .05em; cursor: pointer; }
+  .seg button.on { background: var(--board); color: var(--board-ink); }
+  .gross { font: 800 30px/1 var(--body) !important; text-align: center; padding: 14px 10px !important; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .netline { font-size: 15px; font-weight: 700; text-align: center; padding: 10px; border-radius: 10px; background: var(--bg); }
+  .netline b { font-size: 18px; }
+  .err { color: var(--chilli); font-weight: 700; font-size: 14px; margin: 0; }
+  .entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 10px 0; border-top: 1px dashed var(--line); }
+  .entry:first-child { border-top: 0; }
+  .entry.editing { background: var(--warn-bg); border-radius: 10px; padding-inline: 8px; }
+  .entry .e-no { font: 400 20px/1 var(--display); color: var(--muted); width: 28px; }
+  .entry .e-main b { display: block; font-size: 17px; }
+  .entry .e-main span { font-size: 13px; color: var(--muted); }
+  .entry .e-acts { display: flex; gap: 6px; }
+  .icon { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 18px; cursor: pointer; }
+  .icon.del { color: var(--chilli); }
+  .c-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .c-row:first-of-type { border-top: 0; padding-top: 0; }
+  .c-label { min-width: 0; display: flex; flex-direction: column; }
+  .c-label b { font-size: 16px; }
+  .c-label span { font-size: 13px; color: var(--muted); }
+  .c-label .err { font-size: 13px; }
+  .stepper { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .stepper button { width: 48px; height: 48px; border-radius: 12px; border: 0; cursor: pointer; touch-action: manipulation; font: 800 24px/1 var(--body); background: var(--board); color: var(--board-ink); }
+  .stepper button[data-act="uplus"] { background: var(--lime); color: var(--lime-ink); }
+  .stepper button:active { transform: scale(.94); }
+  .stepper input { width: 64px; margin: 0; text-align: center; font: 800 22px/1 var(--body); padding: 11px 2px; }
+  .w3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
+  .group-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: 6px; }
+
+  /* Review */
+  .rtable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .rtable th { text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 4px; }
+  .rtable th:first-child, .rtable td:first-child { text-align: left; }
+  .rtable td { text-align: right; padding: 10px 4px; border-top: 1px solid var(--line); font-size: 15px; }
+  .rtable tr.missing td { color: var(--chilli); font-weight: 700; }
+  .rtable tfoot td { font-weight: 800; border-top: 2px solid var(--ink); }
+  .scroll-x { overflow-x: auto; }
+
+  /* Previous */
+  .delta { font-size: 12px; font-weight: 700; color: var(--muted); }
+  pre.summary { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace; margin: 0; overflow-x: auto; }
+
+  /* Setup */
+  .edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: end; }
+
+  /* Bottom bar */
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--card); border-top: 1px solid var(--line); padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-inner { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; }
+  .bar-inner .btn { flex: 1; }
+  .bar-inner .btn.small, .bar-inner .btn.shrink { flex: 0 0 auto; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 14px; align-items: center; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 15; max-width: calc(100% - 32px); }
+  .toast.show { opacity: 1; pointer-events: auto; }
+  .toast button { background: none; border: 0; color: var(--corn); font: 800 14px var(--body); text-transform: uppercase; cursor: pointer; padding: 6px 0; }
+  .modal { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal .card { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .modal p { white-space: pre-wrap; margin: 0; font-weight: 600; }
+  .modal textarea { min-height: 180px; font: 12px/1.4 ui-monospace, Menlo, monospace; margin: 0; }
+  .modal .row { display: flex; gap: 8px; } .modal .row .btn { flex: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<template id="shell">
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <h1>Protein <span>Count</span></h1>
+      <span class="clock num" id="clock"></span>
+    </div>
+    <nav>
+      <button data-tab="count" class="active">Count</button>
+      <button data-tab="prev">Previous</button>
+      <button data-tab="setup">Weights</button>
+    </nav>
+  </div>
+  <div class="tape"></div>
+  <div class="offline" id="offline" hidden>Offline. Everything you enter is still saved on this phone.</div>
+</header>
+<main id="view"></main>
+<div class="bar" id="bar" hidden><div class="bar-inner" id="barInner"></div></div>
+<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="toastAct" hidden></button></div>
+<div class="modal" id="modal" hidden>
+  <div class="card" role="dialog" aria-modal="true">
+    <p id="modalMsg"></p>
+    <textarea id="modalText" hidden readonly aria-label="Text to copy"></textarea>
+    <div class="row">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn primary" id="modalOk">OK</button>
+    </div>
+  </div>
+</div>
+</template>
+<script type="application/json" id="cfg">{"v":2,"updatedAt":1794374000000,"proteins":[{"id":"chk","name":"Chicken","units":{"prep":7.5,"box":7.5}},{"id":"gbf","name":"Ground Beef","units":{"prep":6,"pack":2,"box":16}},{"id":"bri","name":"Brisket","units":{"prep":6,"pack":2,"box":16}},{"id":"rib","name":"BBQ Beef Rib","units":{"prep":6,"pack":2,"box":16}},{"id":"pp","name":"Pulled Pork","units":{"prep":6,"pack":2,"box":16}},{"id":"avo","name":"Avocado","units":{"box":0}}],"tares":[]}</script>
+<script id="app-js">
+(() => {
+  const shell = document.getElementById("shell");
+  shell.parentNode.insertBefore(shell.content.cloneNode(true), shell);
+
+  const KEY = "npc.v4";
+  const MAX_KG = 100;
+  const TYPES = { prepared: "Prepared", unopened: "Unopened" };
+  const RESET = ":root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.4 system-ui,-apple-system,sans-serif}img{max-width:100%}[hidden]{display:none!important}";
+
+  const $ = id => document.getElementById(id);
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  const r2 = n => Math.round(n * 100) / 100;
+  const f2 = n => r2(n).toFixed(2);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const loadKey = k => { try { return JSON.parse(localStorage.getItem(k)) || null; } catch { return null; } };
+  const dayFmt = d => new Date(d).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  const timeFmt = d => new Date(d).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const shortFmt = d => new Date(d).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }) + " · " + timeFmt(d);
+
+  // Platform capabilities (all null when opened as a plain file).
+  const use = name => (window.claude && typeof window.claude.use === "function")
+    ? Promise.resolve(window.claude.use(name)).catch(() => null) : Promise.resolve(null);
+  const artP = use("artifact"), dbP = use("db"), userP = use("user");
+
+  // ---------- state (auto-saved after every change) ----------
+  const EMB = JSON.parse($("cfg").textContent);
+  let S = loadKey(KEY);
+  if (!S) {
+    const old = loadKey("npc.v3");
+    S = { cfg: null, count: null, history: old?.history || [], staffName: old?.current?.staff || "", pending: [], view: { screen: "home" } };
+  }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+  // Older setups (before count units) are ignored so everyone gets the unit weights.
+  // v2 setups list only the units a protein uses (a 0 weight there means "not set yet").
+  const norm = c => { c.tares = c.tares || []; c.proteins.forEach(p => {
+    p.units = p.units || { box: p.boxKg || 0 }; delete p.boxKg;
+    if (!c.v) Object.keys(p.units).forEach(k => { if (!(p.units[k] > 0)) delete p.units[k]; });
+  }); c.v = 2; return c; };
+  let cfg = norm((S.cfg && S.cfg.v === 2 && S.cfg.updatedAt > (EMB.updatedAt || 0)) ? S.cfg : EMB);
+  save();
+
+  let tab = "count";
+  let dbCounts = null;      // submitted counts from the shared store (null = not available)
+  let myId = null;
+  const names = {};         // user id -> display name
+
+  // ---------- helpers ----------
+  function ask(msg, { ok = "OK", cancel = "Cancel", text = null } = {}) {
+    return new Promise(res => {
+      $("modalMsg").textContent = msg;
+      $("modalOk").textContent = ok;
+      $("modalCancel").textContent = cancel || "";
+      $("modalCancel").hidden = !cancel;
+      const ta = $("modalText"); ta.hidden = text === null; ta.value = text || "";
+      $("modal").hidden = false;
+      if (text !== null) { ta.focus(); ta.select(); } else $("modalOk").focus();
+      const done = v => { $("modal").hidden = true; $("modalOk").onclick = $("modalCancel").onclick = null; res(v); };
+      $("modalOk").onclick = () => done(true);
+      $("modalCancel").onclick = () => done(false);
+    });
+  }
+  function toast(msg, { action, onAction, ms = 2500 } = {}) {
+    $("toastMsg").textContent = msg;
+    const b = $("toastAct"); b.hidden = !action; b.textContent = action || "";
+    b.onclick = () => { $("toast").classList.remove("show"); onAction && onAction(); };
+    $("toast").classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(() => $("toast").classList.remove("show"), action ? 5000 : ms);
+  }
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); toast("Copied. Paste it to your manager"); return; } catch {}
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch {}
+    ta.remove();
+    if (ok) toast("Copied. Paste it to your manager"); else ask("Copy this text:", { ok: "Done", cancel: null, text });
+  }
+  function parseKg(v) {
+    const s = String(v ?? "").trim().replace(",", ".");
+    if (s === "") return { empty: true };
+    if (!/^-?\d*\.?\d+$/.test(s)) return { error: "Enter a number, like 8.5" };
+    const n = Number(s);
+    if (n < 0) return { error: "Weight can't be negative" };
+    if (n > MAX_KG) return { error: `That's over ${MAX_KG} kg. Check the scale reading.` };
+    return { value: r2(n) };
+  }
+  const setBar = html => { $("barInner").innerHTML = html; $("bar").hidden = !html; };
+  // Count units: how many of each, times the weight of one (set once in Setup).
+  const UNITS = [
+    { k: "prep", label: "Prep containers", short: "prep",   plural: "prep",    type: "prepared", step: 0.5 },
+    { k: "pack", label: "Open packets",    short: "packet", plural: "packets", type: "unopened", step: 1 },
+    { k: "box",  label: "Boxes",           short: "box",    plural: "boxes",   type: "unopened", step: 1 },
+  ];
+  const usedUnits = p => UNITS.filter(u => u.k in p.units);
+  const unsetWeights = () => cfg.proteins.filter(p => usedUnits(p).some(u => !(p.units[u.k] > 0) && Number(S.count?.proteins[p.id]?.units?.[u.k]) > 0));
+  const pc = pid => { const c = S.count.proteins[pid] || (S.count.proteins[pid] = { entries: [], zero: false }); c.units = c.units || {}; return c; };
+  const unitWord = (u, q) => q === 1 ? u.short : u.plural;
+  function parseQty(u, v) {
+    const s = String(v ?? "").trim().replace(",", ".");
+    if (s === "") return { empty: true };
+    if (!/^-?\d*\.?\d+$/.test(s)) return { error: "Enter a number" };
+    const n = Number(s);
+    if (n < 0) return { error: "Can't be negative" };
+    if (n > 500) return { error: "That's too many. Check the count." };
+    if (u.step === 1 && !Number.isInteger(n)) return { error: "Whole numbers only" };
+    if (u.step === 0.5 && !Number.isInteger(n * 2)) return { error: "Use whole or half, like 2.5" };
+    return { value: n };
+  }
+  const net = e => r2(e.gross - e.tare);
+  function sums(pid) {
+    const p = S.count?.proteins[pid]; const out = { prepared: 0, unopened: 0, total: 0, n: 0 };
+    (p?.entries || []).forEach(e => { out[e.type] += net(e); out.n++; });
+    const conf = cfg.proteins.find(x => x.id === pid);
+    if (p?.units && conf) UNITS.forEach(u => { const q = p.units[u.k]; if (q !== undefined) out[u.type] += q * (conf.units[u.k] || 0); });
+    out.prepared = r2(out.prepared); out.unopened = r2(out.unopened); out.total = r2(out.prepared + out.unopened);
+    return out;
+  }
+  const isDone = pid => { const p = S.count?.proteins[pid]; return !!p && (p.entries.length > 0 || p.zero || Object.keys(p.units || {}).length > 0); };
+  const unitSummary = pid => { const c = S.count?.proteins[pid], conf = cfg.proteins.find(x => x.id === pid);
+    return UNITS.filter(u => c?.units?.[u.k] !== undefined && u.k in conf.units).map(u => `${c.units[u.k]} ${unitWord(u, c.units[u.k])}`); };
+  const doneCount = () => cfg.proteins.filter(p => isDone(p.id)).length;
+  const grand = () => r2(cfg.proteins.reduce((s, p) => s + sums(p.id).total, 0));
+  const tareList = () => [{ id: "none", name: "No container", kg: 0 }, ...cfg.tares];
+
+  // ---------- clock / offline ----------
+  function tick() {
+    const now = new Date();
+    $("clock").textContent = `${now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} · ${timeFmt(now)}`;
+  }
+  tick(); setInterval(tick, 20000);
+  const netState = () => { $("offline").hidden = navigator.onLine !== false; };
+  addEventListener("online", () => { netState(); retryPending(); });
+  addEventListener("offline", netState); netState();
+
+  // ---------- navigation ----------
+  document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", async () => {
+    if (tab === "setup" && b.dataset.tab !== "setup" && setupDirty) {
+      if (!(await ask("You changed weights but didn't save. Leave without saving?", { ok: "Leave" }))) return;
+      setupDraft = null; setupDirty = false;
+    }
+    tab = b.dataset.tab; render();
+  }));
+  function go(screen, extra = {}) { $("toast").classList.remove("show"); S.view = { screen, ...extra }; save(); render(); window.scrollTo(0, 0); }
+
+  function render() {
+    document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab === tab));
+    if (tab === "prev") return renderPrev();
+    if (tab === "setup") return renderSetup();
+    const v = S.view || { screen: "home" };
+    if (v.screen === "protein" && S.count && cfg.proteins.some(p => p.id === v.pid)) return renderProtein(v.pid);
+    if (v.screen === "review" && S.count) return renderReview();
+    if (v.screen === "done") return renderDone();
+    return renderHome();
+  }
+
+  // ---------- HOME ----------
+  function lastSubmitted() {
+    const all = [...(dbCounts || []), ...S.history.filter(h => h.v === 4)];
+    return all.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""))[0];
+  }
+  function renderHome() {
+    const view = $("view");
+    if (!S.count) {
+      const last = lastSubmitted();
+      view.innerHTML = `
+        <div class="card stack">
+          <p class="eyebrow">Closing</p>
+          <h2>${esc(dayFmt(Date.now()))}</h2>
+          <p class="muted">Count all ${cfg.proteins.length} proteins, then submit the report to your manager.</p>
+          <label>Your name<input id="staffName" autocomplete="name" placeholder="Who is counting?" value="${esc(S.staffName)}"></label>
+          <button class="btn primary block" data-act="start">Start closing count</button>
+        </div>
+        ${last ? `<div class="card"><p class="eyebrow">Last submitted</p><p style="margin:6px 0 0"><b>${esc(shortFmt(last.submittedAt))}</b> · ${esc(nameOf(last))} · <span class="num">${f2(last.total)} kg</span></p></div>` : ""}`;
+      setBar("");
+      return;
+    }
+    const done = doneCount(), total = cfg.proteins.length, pct = total ? Math.round(done / total * 100) : 0;
+    view.innerHTML = `
+      <div class="card progress-card">
+        <div class="progress-big num">${done} / ${total}</div>
+        <p class="eyebrow">Counting progress</p>
+        <div><div class="meter"><i style="width:${pct}%"></i></div><p class="muted" style="margin-top:6px">${pct}% completed · started ${esc(timeFmt(S.count.startedAt))} by ${esc(S.count.staffName || "—")}</p></div>
+      </div>
+      <p class="eyebrow">Select a protein</p>
+      <div class="stack">
+        ${cfg.proteins.map(p => {
+          const s = sums(p.id), d = isDone(p.id), z = S.count.proteins[p.id]?.zero;
+          const parts = unitSummary(p.id); if (s.n) parts.push(`${s.n} weighed`);
+          let sub = !d ? "Not counted" : z ? "None in stock" : (parts.join(" · ") || "0 kg");
+          if (usedUnits(p).some(u => !(p.units[u.k] > 0))) sub += ' · <span style="color:var(--chilli);font-weight:700">weight not set</span>';
+          return `<button class="tile${d ? " done" : ""}" data-act="open" data-pid="${p.id}">
+            <span class="t-name">${esc(p.name)}<span class="pill ${d ? "ok" : "pending"}">${d ? "Done" : "Pending"}</span></span>
+            <span class="t-sub num">${sub}</span>
+            <span class="t-kg num">${d ? f2(s.total) + "<small> kg</small>" : "<small>—</small>"}</span>
+          </button>`;
+        }).join("")}
+      </div>
+      <div class="card sum-row"><span><p class="eyebrow">Total counted</p></span><span class="sum-big num">${f2(grand())} <small style="font:700 15px var(--body);color:var(--muted)">kg</small></span></div>
+      <button class="link" data-act="discard">Discard this count</button>`;
+    setBar(`<button class="btn primary" data-act="review">Review &amp; submit</button>`);
+  }
+
+  // ---------- PROTEIN ----------
+  function draft() {
+    const v = S.view;
+    v.draft = v.draft || { type: "prepared", gross: "", tare: lastTare("prepared"), tareCustom: "" };
+    return v.draft;
+  }
+  // Each stock type remembers the container last used with it.
+  function lastTare(type) { const id = (S.lastTare || {})[type]; return tareList().some(t => t.id === id) ? id : "none"; }
+  function tareOf(d) {
+    if (d.tare === "custom") return parseKg(d.tareCustom);
+    const t = tareList().find(x => x.id === d.tare) || tareList()[0];
+    return { value: t.kg, name: t.name };
+  }
+  function renderProtein(pid) {
+    const p = cfg.proteins.find(x => x.id === pid), d = draft(), s = sums(pid), entry = pc(pid);
+    const units = usedUnits(p);
+    const editing = S.view.edit ? entry.entries.find(e => e.id === S.view.edit) : null;
+    const idx = cfg.proteins.findIndex(x => x.id === pid);
+    const showWeigh = !units.length || editing || S.view.weighOpen || entry.entries.length > 0;
+    const groups = ["prepared", "unopened"].map(t => {
+      const list = entry.entries.map((e, i) => ({ e, i })).filter(x => x.e.type === t);
+      if (!list.length) return "";
+      return `<div class="group-h"><span>${TYPES[t]}</span><span class="num">${f2(s[t])} kg</span></div>
+        <div>${list.map(({ e, i }) => `<div class="entry${editing && editing.id === e.id ? " editing" : ""}">
+          <span class="e-no num">${i + 1}</span>
+          <span class="e-main"><b class="num">${f2(net(e))} kg</b><span class="num">${e.tare ? `${f2(e.gross)} − ${f2(e.tare)} ${esc(e.tareName || "container")}` : esc(e.tareName && e.tareName !== "No container" ? e.tareName : "No container")}</span></span>
+          <span class="e-acts"><button class="icon" data-act="edit" data-eid="${e.id}" aria-label="Edit container ${i + 1}">✎</button><button class="icon del" data-act="del" data-eid="${e.id}" aria-label="Delete container ${i + 1}">🗑</button></span>
+        </div>`).join("")}</div>`;
+    }).join("");
+
+    $("view").innerHTML = `
+      <div class="back"><button class="btn small ghost" data-act="home">‹ All proteins</button><span class="muted num">${idx + 1} of ${cfg.proteins.length}</span></div>
+      <div class="card stack">
+        <div class="p-title"><h2>${esc(p.name)}</h2><span class="p-total num" id="pTotal">${f2(s.total)}<small>kg</small></span></div>
+        <p class="muted num" id="pSplit">Prepared ${f2(s.prepared)} kg · Unopened ${f2(s.unopened)} kg${entry.zero ? " · marked none in stock" : ""}</p>
+      </div>
+      ${units.length ? `<div class="card stack">
+        <p class="eyebrow">Count</p>
+        ${units.map(u => `<div class="c-row" data-k="${u.k}">
+          <div class="c-label"><b>${u.label}</b><span class="num" data-info>${unitInfo(p, u)}</span><span class="err" data-uerr hidden></span></div>
+          <div class="stepper">
+            <button type="button" data-act="uminus" data-k="${u.k}" aria-label="Fewer ${u.label}">−</button>
+            <input data-unit="${u.k}" class="num" inputmode="${u.step === 1 ? "numeric" : "decimal"}" autocomplete="off" placeholder="–" value="${entry.units[u.k] !== undefined ? entry.units[u.k] : ""}" aria-label="${u.label} of ${esc(p.name)}">
+            <button type="button" data-act="uplus" data-k="${u.k}" aria-label="More ${u.label}">+</button>
+          </div>
+        </div>`).join("")}
+        <button class="link" data-act="gotoWeights" data-pid="${p.id}" style="align-self:flex-start">${units.some(u => !(p.units[u.k] > 0)) ? "⚠ Set the weight in Weights ›" : "Weight changed? Update it in Weights ›"}</button>
+      </div>` : `<div class="card stack"><p class="err">No count units are set for ${esc(p.name)}.</p><p class="muted">Weigh it below instead.</p></div>`}
+      ${showWeigh ? `<div class="card stack">
+        <p class="eyebrow">${editing ? "Edit weighed container" : units.length ? "Weigh odd leftovers" : "Weigh a container"}</p>
+        <div class="seg" role="group" aria-label="Stock type">
+          ${Object.entries(TYPES).map(([k, l]) => `<button data-act="type" data-type="${k}" class="${d.type === k ? "on" : ""}" aria-pressed="${d.type === k}">${l}</button>`).join("")}
+        </div>
+        <label>Scale reading (kg)<input id="gross" class="gross num" inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="0.00" value="${esc(d.gross)}"></label>
+        <div class="two">
+          <label>Container<select id="tareSel">
+            ${tareList().map(t => `<option value="${t.id}"${d.tare === t.id ? " selected" : ""}>${esc(t.name)}${t.kg ? ` (−${f2(t.kg)} kg)` : ""}</option>`).join("")}
+            <option value="custom"${d.tare === "custom" ? " selected" : ""}>Other: type its weight</option>
+          </select></label>
+          <label${d.tare === "custom" ? "" : " hidden"} id="customWrap">Container weight (kg)<input id="tareCustom" class="num" inputmode="decimal" placeholder="0.00" value="${esc(d.tareCustom)}"></label>
+        </div>
+        <div class="netline num" id="netLine"></div>
+        <p class="err" id="err" hidden></p>
+        <div class="two">
+          ${editing ? `<button class="btn" data-act="cancelEdit">Cancel</button><button class="btn go" data-act="add">Update</button>`
+                    : `<button class="btn go" data-act="add" style="grid-column:1/-1">+ Add container</button>`}
+        </div>
+      </div>` : `<button class="btn ghost block" data-act="weighOpen">Weigh odd leftovers instead ›</button>`}
+      ${s.n || !units.length ? `<div class="card stack">
+        <p class="eyebrow">Weighed containers (${s.n})</p>
+        ${groups || `<p class="muted">Nothing weighed yet.${entry.zero ? "" : " If there is none, tap <b>None in stock</b>."}</p>`}
+      </div>` : ""}`;
+    if (showWeigh) updateNetLine();
+    setProteinBar(pid);
+  }
+  function setProteinBar(pid) {
+    const entry = pc(pid), next = nextPending(pid);
+    const any = entry.entries.length || Object.values(entry.units).some(q => q > 0);
+    setBar(`${!any ? `<button class="btn shrink${entry.zero ? " go" : ""}" data-act="zero">${entry.zero ? "✓ None in stock" : "None in stock"}</button>` : ""}
+            <button class="btn primary" data-act="next">${next ? "Done · Next ›" : "Done · Review ›"}</button>`);
+  }
+  function unitInfo(p, u) {
+    const q = pc(p.id).units[u.k], w = p.units[u.k];
+    if (!(w > 0)) return `<span class="err">Weight of 1 ${u.short} not set</span>`;
+    return q ? `${q} × ${fmtW(w)} kg = <b>${f2(q * w)} kg</b>` : `${fmtW(w)} kg each`;
+  }
+  const fmtW = w => String(r2(w));
+  function setUnit(pid, k, raw, fromInput) {
+    const p = cfg.proteins.find(x => x.id === pid), u = UNITS.find(x => x.k === k), c = pc(pid);
+    const row = document.querySelector(`.c-row[data-k="${k}"]`), err = row?.querySelector("[data-uerr]");
+    const v = typeof raw === "number" ? { value: raw } : parseQty(u, raw);
+    if (v.error) { if (err) { err.hidden = false; err.textContent = v.error; } return; }
+    if (err) err.hidden = true;
+    if (v.empty) delete c.units[k]; else { c.units[k] = v.value; c.zero = false; }
+    save();
+    if (row) {
+      row.querySelector("[data-info]").innerHTML = unitInfo(p, u);
+      if (!fromInput) row.querySelector("input").value = c.units[k] ?? "";
+    }
+    refreshProteinNumbers(pid); setProteinBar(pid);
+  }
+  function nextPending(pid) {
+    const order = cfg.proteins.map(p => p.id), start = order.indexOf(pid);
+    for (let i = 1; i <= order.length; i++) { const id = order[(start + i) % order.length]; if (id !== pid && !isDone(id)) return id; }
+    return null;
+  }
+  function validateDraft() {
+    const d = draft(), g = parseKg(d.gross), t = tareOf(d);
+    if (g.empty) return { msg: "" };
+    if (g.error) return { error: g.error };
+    if (t.error) return { error: "Container weight: " + t.error };
+    if (t.empty) return { error: "Type the container weight" };
+    if (g.value <= 0) return { error: "Weight must be more than 0" };
+    if (t.value >= g.value) return { error: "Container weight must be less than the scale reading" };
+    return { gross: g.value, tare: t.value || 0, tareName: d.tare === "custom" ? "container" : t.name };
+  }
+  function updateNetLine() {
+    const v = validateDraft(), el = $("netLine"), err = $("err");
+    if (!el) return;
+    err.hidden = !v.error; err.textContent = v.error || "";
+    if (v.gross !== undefined) el.innerHTML = v.tare ? `${f2(v.gross)} − ${f2(v.tare)} = <b>${f2(v.gross - v.tare)} kg</b> ${TYPES[draft().type].toLowerCase()}` : `<b>${f2(v.gross)} kg</b> ${TYPES[draft().type].toLowerCase()}`;
+    else el.textContent = "Enter the scale reading";
+  }
+  function refreshProteinNumbers(pid) {
+    const s = sums(pid);
+    $("pTotal").innerHTML = `${f2(s.total)}<small>kg</small>`;
+    $("pSplit").textContent = `Prepared ${f2(s.prepared)} kg · Unopened ${f2(s.unopened)} kg`;
+  }
+  function addEntry() {
+    const pid = S.view.pid, v = validateDraft(), d = draft();
+    if (v.gross === undefined) { const err = $("err"); err.hidden = false; err.textContent = v.error || "Enter the scale reading first"; $("gross").focus(); return; }
+    const list = pc(pid).entries;
+    if (S.view.edit) {
+      const e = list.find(x => x.id === S.view.edit);
+      Object.assign(e, { type: d.type, gross: v.gross, tare: v.tare, tareName: v.tareName });
+      S.view.edit = null; toast(`Container updated · ${f2(net(e))} kg`);
+    } else {
+      list.push({ id: uid(), type: d.type, gross: v.gross, tare: v.tare, tareName: v.tareName, at: new Date().toISOString() });
+      toast(`Added ${f2(v.gross - v.tare)} kg ${TYPES[d.type].toLowerCase()}`);
+    }
+    pc(pid).zero = false; d.gross = "";
+    if (d.tare !== "custom") { S.lastTare = S.lastTare || {}; S.lastTare[d.type] = d.tare; }
+    save(); renderProtein(pid);
+    const g = $("gross"); g && g.focus();
+  }
+
+  // A typed scale reading that wasn't added is never dropped silently.
+  async function keepTyped() {
+    const d = draft();
+    if (!String(d.gross).trim()) return true;
+    if (await ask(`You typed ${d.gross} kg but didn't add it.`, { ok: "Add it", cancel: "Discard it" })) { addEntry(); return !String(draft().gross).trim(); }
+    d.gross = ""; S.view.edit = null; save(); return true;
+  }
+
+  // ---------- REVIEW ----------
+  function renderReview() {
+    const rows = cfg.proteins.map(p => ({ p, s: sums(p.id), d: isDone(p.id) }));
+    const tot = rows.reduce((a, r) => ({ pr: a.pr + r.s.prepared, un: a.un + r.s.unopened }), { pr: 0, un: 0 });
+    const missing = rows.filter(r => !r.d);
+    $("view").innerHTML = `
+      <div class="back"><button class="btn small ghost" data-act="home">‹ Back to count</button></div>
+      <div class="card stack">
+        <p class="eyebrow">Review closing count</p>
+        <h2>${esc(dayFmt(S.count.startedAt))}</h2>
+        ${missing.length ? `<p class="err">⚠ Not counted: ${missing.map(r => esc(r.p.name)).join(", ")}</p>` : `<p class="muted">✅ All ${rows.length} proteins counted.</p>`}
+        <div class="scroll-x"><table class="rtable">
+          <thead><tr><th>Protein</th><th>Prepared</th><th>Unopened</th><th>Total kg</th></tr></thead>
+          <tbody>${rows.map(r => `<tr class="${r.d ? "" : "missing"}" data-act="open" data-pid="${r.p.id}" style="cursor:pointer">
+            <td>${esc(r.p.name)}</td>${r.d ? `<td>${f2(r.s.prepared)}</td><td>${f2(r.s.unopened)}</td><td><b>${f2(r.s.total)}</b></td>` : `<td colspan="3">Missing</td>`}</tr>`).join("")}</tbody>
+          <tfoot><tr><td>Total</td><td>${f2(tot.pr)}</td><td>${f2(tot.un)}</td><td>${f2(tot.pr + tot.un)}</td></tr></tfoot>
+        </table></div>
+      </div>
+      <div class="card stack">
+        <label>Counted by<input id="countName" value="${esc(S.count.staffName)}" placeholder="Your name"></label>
+        <label>Notes for the manager (optional)<textarea id="countNotes" placeholder="Waste, low stock, anything unusual">${esc(S.count.notes || "")}</textarea></label>
+      </div>`;
+    setBar(`<button class="btn primary" data-act="submit">Submit closing count</button>`);
+  }
+  function buildRecord() {
+    const items = cfg.proteins.map(p => {
+      const s = sums(p.id), c = S.count.proteins[p.id];
+      return { pid: p.id, name: p.name, counted: isDone(p.id), zero: !!c?.zero, prepared: s.prepared, unopened: s.unopened, total: s.total,
+               entries: (c?.entries || []).map(e => ({ type: e.type, gross: e.gross, tare: e.tare, net: net(e) })),
+               units: UNITS.filter(u => c?.units?.[u.k] !== undefined && u.k in p.units).map(u => ({ k: u.k, qty: c.units[u.k], each: p.units[u.k] })) };
+    });
+    return { id: S.count.id, v: 4, startedAt: S.count.startedAt, submittedAt: new Date().toISOString(),
+             staffName: S.count.staffName, by: myId || null, notes: S.count.notes || "", total: grand(), items };
+  }
+  function reportText(h) {
+    if (h.v !== 4) return legacyText(h);
+    const L = ["CLOSING PROTEIN COUNT", `${dayFmt(h.submittedAt)} · ${timeFmt(h.submittedAt)}`, `Counted by: ${nameOf(h)}`, ""];
+    h.items.forEach(i => {
+      if (!i.counted) { L.push(`• ${i.name}: NOT COUNTED`); return; }
+      if (i.zero) { L.push(`• ${i.name}: 0.00 kg (none in stock)`); return; }
+      L.push(`• ${i.name}: ${f2(i.total)} kg  (prepared ${f2(i.prepared)} / unopened ${f2(i.unopened)})`);
+      const parts = (i.units || []).filter(x => x.qty > 0).map(x => { const u = UNITS.find(y => y.k === x.k); return `${x.qty} ${unitWord(u, x.qty)} × ${fmtW(x.each)}`; });
+      if (i.entries.length) parts.push(`${i.entries.length} weighed = ${f2(i.entries.reduce((a, e) => a + e.net, 0))}`);
+      if (parts.length) L.push(`   ${parts.join(" + ")}`);
+    });
+    L.push("", `TOTAL: ${f2(h.total)} kg`);
+    const miss = h.items.filter(i => !i.counted).length;
+    if (miss) L.push(`⚠ ${miss} protein${miss === 1 ? "" : "s"} not counted`);
+    if (h.notes) L.push("", "Notes: " + h.notes);
+    return L.join("\n");
+  }
+  function legacyText(h) {
+    const L = [`COUNT ${h.date || ""} · ${h.staff || ""}`];
+    (h.items || []).forEach(i => L.push(`• ${i.name}: ${i.kg !== undefined ? f2(i.kg) + " kg" : (i.qty ?? "-") + " " + (i.unit || "")}`));
+    if (h.notes) L.push("Notes: " + h.notes);
+    return L.join("\n");
+  }
+  async function submit() {
+    S.count.staffName = ($("countName")?.value || S.count.staffName || "").trim();
+    S.count.notes = $("countNotes")?.value || "";
+    if (!S.count.staffName) { toast("Enter your name first"); $("countName").focus(); return; }
+    const unset = unsetWeights();
+    if (unset.length) {
+      const fix = await ask(`${unset.map(p => p.name).join(", ")}: the weight isn't set, so those count as 0 kg.\n\nSet the weight first?`, { ok: "Set weight", cancel: "Submit anyway" });
+      if (fix) { tab = "setup"; render(); focusWeights(unset[0].id); return; }
+    }
+    const missing = cfg.proteins.filter(p => !isDone(p.id)).map(p => p.name);
+    if (missing.length && !(await ask(`These proteins are not counted:\n\n${missing.join("\n")}\n\nSubmit anyway?`, { ok: "Submit anyway", cancel: "Go back" }))) return;
+    const rec = buildRecord();
+    S.history.unshift(rec); S.pending.push(rec.id);
+    S.staffName = rec.staffName; S.count = null; S.view = { screen: "done", id: rec.id, status: "sending" };
+    save(); render(); window.scrollTo(0, 0);
+    const ok = await upload(rec);
+    if (S.view.screen === "done" && S.view.id === rec.id) { S.view.status = ok ? "sent" : "local"; save(); render(); }
+  }
+  async function upload(rec) {
+    const db = await dbP; if (!db) return false;
+    try {
+      await Promise.race([db.collection("counts").doc(rec.id).set(clone(rec)), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000))]);
+      S.pending = S.pending.filter(id => id !== rec.id); save(); return true;
+    } catch { return false; }
+  }
+  async function retryPending() {
+    for (const id of [...S.pending]) { const rec = S.history.find(h => h.id === id); if (!rec) { S.pending = S.pending.filter(x => x !== id); continue; } await upload(rec); }
+    save(); if (tab === "prev") renderPrev();
+  }
+
+  // ---------- DONE ----------
+  function renderDone() {
+    const rec = S.history.find(h => h.id === S.view.id);
+    if (!rec) return go("home");
+    const st = S.view.status;
+    const msg = st === "sent" ? "✅ Sent. Your manager can see it under Previous."
+      : st === "sending" ? "Sending…"
+      : "Saved on this phone. Copy the report below and send it to your manager.";
+    $("view").innerHTML = `
+      <div class="card stack">
+        <p class="eyebrow">Closing count submitted</p>
+        <h2 class="num">${f2(rec.total)} kg total</h2>
+        <p style="margin:0;font-weight:700;color:${st === "sent" ? "var(--lime)" : "var(--ink)"}">${msg}</p>
+        <pre class="summary">${esc(reportText(rec))}</pre>
+      </div>`;
+    setBar(`<button class="btn shrink" data-act="newCount">Done</button><button class="btn primary" data-act="copyRec" data-id="${rec.id}">Copy report</button>`);
+  }
+
+  // ---------- PREVIOUS ----------
+  function nameOf(h) { return (h.by && names[h.by]) || h.staffName || h.staff || "—"; }
+  function allPrevious() {
+    const map = new Map();
+    (dbCounts || []).forEach(h => map.set(h.id, { ...h, shared: true }));
+    S.history.forEach(h => { if (!map.has(h.id)) map.set(h.id, { ...h, localOnly: true }); });
+    return [...map.values()].sort((a, b) => (b.submittedAt || b.savedAt || "").localeCompare(a.submittedAt || a.savedAt || ""));
+  }
+  function renderPrev() {
+    setBar("");
+    const list = allPrevious();
+    const v4 = list.filter(h => h.v === 4);
+    const head = `<div class="card"><p class="eyebrow">Previous closing counts</p><p class="muted" style="margin-top:4px">${dbCounts ? "Counts submitted by everyone on this page, newest first." : "Counts saved on this phone, newest first."} Changes are compared with the count before.</p></div>`;
+    if (!list.length) { $("view").innerHTML = head + `<div class="card muted">No counts yet. Submitted closing counts will show here.</div>`; return; }
+    $("view").innerHTML = head + list.map(h => {
+      if (h.v !== 4) return `<div class="card stack"><p class="eyebrow">Older format · ${esc(h.date || "")}</p><pre class="summary">${esc(legacyText(h))}</pre></div>`;
+      const prev = v4[v4.indexOf(h) + 1];
+      const delta = (a, b) => { if (b === undefined) return ""; const d = r2(a - b); return `<span class="delta">${d === 0 ? "±0" : (d > 0 ? "▲ +" : "▼ ") + f2(d)}</span>`; };
+      const prevItem = pid => prev?.items.find(i => i.pid === pid);
+      const miss = h.items.filter(i => !i.counted).length;
+      return `<div class="card stack" data-id="${h.id}">
+        <div class="sum-row"><span><b>${esc(shortFmt(h.submittedAt))}</b><br><span class="muted">${esc(nameOf(h))}${h.localOnly ? (S.pending.includes(h.id) ? " · not sent yet" : " · this phone only") : ""}${miss ? ` · <span style="color:var(--chilli)">${miss} missing</span>` : ""}</span></span>
+          <span class="sum-big num">${f2(h.total)}<small style="font:700 13px var(--body);color:var(--muted)"> kg</small></span></div>
+        <div class="scroll-x"><table class="rtable"><tbody>
+          ${h.items.map(i => `<tr class="${i.counted ? "" : "missing"}"><td>${esc(i.name)}</td><td>${i.counted ? f2(i.total) + " kg" : "Missing"}</td><td>${i.counted && prevItem(i.pid)?.counted ? delta(i.total, prevItem(i.pid).total) : ""}</td></tr>`).join("")}
+        </tbody></table></div>
+        ${h.notes ? `<p class="muted"><b>Notes:</b> ${esc(h.notes)}</p>` : ""}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn small" data-act="copyRec" data-id="${h.id}">Copy report</button>
+          ${h.localOnly && S.pending.includes(h.id) ? `<button class="btn small" data-act="retry">Try sending again</button>` : ""}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // ---------- SETUP ----------
+  let setupDraft = null, setupDirty = false;
+  function renderSetup() {
+    if (!setupDraft) setupDraft = clone(cfg);
+    const D = setupDraft;
+    $("view").innerHTML = `
+      <div class="card stack">
+        <h2 style="font-size:20px">Empty containers for weighing</h2>
+        <p class="muted">Only needed for weighing odd leftovers. Add the <b>empty</b> weight of each container, and the app takes it off the scale reading, e.g. 8.50 − 0.50 = 8.00 kg.</p>
+        ${D.tares.map(t => `<div class="edit-row" data-tid="${t.id}">
+          <label>Container<input data-f="tname" value="${esc(t.name)}" placeholder="e.g. 1/3 pan"></label>
+          <label>Empty (kg)<input data-f="tkg" class="num" inputmode="decimal" value="${t.kg || ""}" placeholder="0.00"></label>
+          <button class="icon del" data-act="tdel" aria-label="Remove ${esc(t.name)}">🗑</button></div>`).join("") || `<p class="muted">No containers yet.</p>`}
+        <button class="btn" data-act="tadd">+ Add container</button>
+      </div>
+      <div class="card stack" style="order:-1">
+        <h2>Weights</h2>
+        <p class="muted">The weight in kg of <b>one</b> of each. These are saved and used for every count, so only change them when a box or container size changes. Tap <b>Save weights</b> when done.</p>
+        ${D.proteins.map(p => `<div class="card stack" data-pid="${p.id}" style="background:var(--bg)">
+          <label>Protein<input data-f="pname" value="${esc(p.name)}" style="background:var(--card)"></label>
+          <div class="w3">${usedUnits(p).map(u => `<label>1 ${u.short} (kg)<input data-f="u.${u.k}" class="num" inputmode="decimal" value="${p.units[u.k] || ""}" placeholder="Not set" style="background:var(--card)${p.units[u.k] > 0 ? "" : ";border-color:var(--chilli)"}"></label>`).join("")}</div>
+        </div>`).join("")}
+      </div>`;
+    setBar(`<button class="btn shrink" data-act="setupUndo"${setupDirty ? "" : " disabled"}>Undo</button><button class="btn primary" data-act="setupSave"${setupDirty ? "" : " disabled"}>${setupDirty ? "Save weights" : "Weights saved"}</button>`);
+  }
+  function focusWeights(pid) {
+    const card = document.querySelector(`#view [data-pid="${pid}"]`); if (!card) return;
+    card.scrollIntoView({ block: "center" });
+    const inp = card.querySelector('input[data-f^="u."]'); inp && inp.focus();
+  }
+  function buildDoc(conf) {
+    const SC = "<" + "/script>";
+    const keep = [...document.querySelectorAll("[data-keep]")].map(el => el.outerHTML).join("\n");
+    const json = JSON.stringify(conf).replace(/</g, "\\u003c");
+    return '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>' + RESET + "</style></head><body>"
+      + keep + '\n<template id="shell">' + shell.innerHTML + "</template>\n"
+      + '<script type="application/json" id="cfg">' + json + SC + "\n"
+      + '<script id="app-js">' + $("app-js").textContent + SC + "\n</body></html>";
+  }
+  async function saveSetup() {
+    const D = setupDraft;
+    for (const t of D.tares) {
+      t.name = t.name.trim();
+      if (!t.name) { toast("Every container needs a name"); return; }
+      if (!(t.kg > 0)) { toast(`Enter the empty weight of ${t.name}`); return; }
+    }
+    if (D.proteins.some(p => !p.name.trim())) { toast("Every protein needs a name"); return; }
+    D.proteins.forEach(p => p.name = p.name.trim());
+    D.updatedAt = Date.now();
+    cfg = clone(D); S.cfg = clone(D); save(); setupDirty = false; renderSetup();
+    const art = await artP;
+    if (art) {
+      try { await art.publish(buildDoc(cfg)); toast("Saved for everyone with the link. Reloading…", { ms: 4000 }); return; }
+      catch (e) { if (e && e.code === "conflict") { toast("Someone else just saved. Reloading their version…", { ms: 4000 }); return; } }
+    }
+    toast("Saved on this phone only. The page owner can save it for everyone.", { ms: 4000 });
+  }
+
+  // ---------- events ----------
+  document.addEventListener("click", async e => {
+    const el = e.target.closest("[data-act]"); if (!el) return;
+    const act = el.dataset.act;
+    if (act === "start") {
+      const nm = ($("staffName")?.value || "").trim();
+      if (!nm) { toast("Enter your name first"); $("staffName").focus(); return; }
+      S.staffName = nm;
+      S.count = { id: uid(), startedAt: new Date().toISOString(), staffName: nm, notes: "", proteins: {} };
+      go("home");
+    }
+    else if (act === "open") go("protein", { pid: el.dataset.pid });
+    else if (act === "home") { if (S.view.screen === "protein" && !(await keepTyped())) return; go("home"); }
+    else if (act === "review") go("review");
+    else if (act === "discard") {
+      if (await ask("Discard this count? All entries will be deleted.", { ok: "Discard" })) { S.count = null; go("home"); }
+    }
+    else if (act === "type") { const d = draft(); if (d.type !== el.dataset.type) { d.type = el.dataset.type; d.tare = lastTare(d.type); d.tareCustom = ""; } save(); renderProtein(S.view.pid); $("gross")?.focus(); }
+    else if (act === "add") addEntry();
+    else if (act === "uplus" || act === "uminus") {
+      const u = UNITS.find(x => x.k === el.dataset.k), cur = Number(pc(S.view.pid).units[u.k] || 0);
+      setUnit(S.view.pid, u.k, Math.max(0, cur + (act === "uplus" ? u.step : -u.step)));
+    }
+    else if (act === "gotoWeights") { if (!(await keepTyped())) return; tab = "setup"; render(); focusWeights(el.dataset.pid); }
+    else if (act === "weighOpen") { S.view.weighOpen = true; save(); renderProtein(S.view.pid); $("gross")?.focus(); }
+    else if (act === "edit") {
+      const en = pc(S.view.pid).entries.find(x => x.id === el.dataset.eid);
+      const known = tareList().find(t => t.name === en.tareName && t.kg === en.tare);
+      S.view.edit = en.id;
+      S.view.draft = { type: en.type, gross: String(en.gross), tare: known ? known.id : (en.tare ? "custom" : "none"), tareCustom: known ? "" : String(en.tare || "") };
+      save(); renderProtein(S.view.pid); window.scrollTo(0, 0); $("gross")?.focus();
+    }
+    else if (act === "cancelEdit") { S.view.edit = null; draft().gross = ""; save(); renderProtein(S.view.pid); }
+    else if (act === "del") {
+      const list = pc(S.view.pid).entries, i = list.findIndex(x => x.id === el.dataset.eid), [gone] = list.splice(i, 1), pid = S.view.pid;
+      if (S.view.edit === gone.id) { S.view.edit = null; draft().gross = ""; }
+      save(); renderProtein(pid);
+      toast(`Deleted ${f2(net(gone))} kg`, { action: "Undo", onAction: () => { pc(pid).entries.splice(i, 0, gone); save(); if (S.view.pid === pid) renderProtein(pid); } });
+    }
+    else if (act === "zero") { const c = pc(S.view.pid); c.zero = !c.zero; save(); renderProtein(S.view.pid); if (c.zero) toast("Marked as none in stock"); }
+    else if (act === "next") {
+      const pid = S.view.pid, d = draft();
+      if (!(await keepTyped())) return;
+      d.gross = ""; S.view.edit = null;
+      const nx = nextPending(pid);
+      if (!isDone(pid)) toast(`${cfg.proteins.find(p => p.id === pid).name} is still pending`);
+      nx ? go("protein", { pid: nx }) : go("review");
+    }
+    else if (act === "submit") submit();
+    else if (act === "newCount") go("home");
+    else if (act === "copyRec") { const h = allPrevious().find(x => x.id === el.dataset.id) || S.history.find(x => x.id === el.dataset.id); h && copy(reportText(h)); }
+    else if (act === "retry") { toast("Sending…"); retryPending(); }
+    else if (act === "tadd") { setupDraft.tares.push({ id: uid(), name: "", kg: 0 }); setupDirty = true; renderSetup(); const ins = document.querySelectorAll('[data-f="tname"]'); ins[ins.length - 1]?.focus(); }
+    else if (act === "tdel") { setupDraft.tares = setupDraft.tares.filter(t => t.id !== el.closest("[data-tid]").dataset.tid); setupDirty = true; renderSetup(); }
+    else if (act === "setupUndo") { setupDraft = null; setupDirty = false; renderSetup(); }
+    else if (act === "setupSave") saveSetup();
+  });
+
+  document.addEventListener("input", e => {
+    const t = e.target;
+    if (t.id === "staffName") { S.staffName = t.value; save(); }
+    else if (t.id === "countName" && S.count) { S.count.staffName = t.value; save(); }
+    else if (t.id === "countNotes" && S.count) { S.count.notes = t.value; save(); }
+    else if (t.dataset.unit) setUnit(S.view.pid, t.dataset.unit, t.value, true);
+    else if (t.id === "gross") { draft().gross = t.value; save(); updateNetLine(); }
+    else if (t.id === "tareCustom") { draft().tareCustom = t.value; save(); updateNetLine(); }
+    else if (t.id === "tareSel") { draft().tare = t.value; $("customWrap").hidden = t.value !== "custom"; save(); updateNetLine(); if (t.value === "custom") $("tareCustom").focus(); }
+    else if (t.dataset.f && setupDraft) {
+      setupDirty = true;
+      const tr = t.closest("[data-tid]"), pr = t.closest("[data-pid]");
+      if (tr) { const x = setupDraft.tares.find(q => q.id === tr.dataset.tid); if (t.dataset.f === "tname") x.name = t.value; else x.kg = parseKg(t.value).value || 0; }
+      if (pr) { const x = setupDraft.proteins.find(q => q.id === pr.dataset.pid); if (t.dataset.f === "pname") x.name = t.value; else x.units[t.dataset.f.slice(2)] = parseKg(t.value).value || 0; }
+      const sb = document.querySelector('[data-act="setupSave"]'), ub = document.querySelector('[data-act="setupUndo"]');
+      if (sb) { sb.disabled = false; sb.textContent = "Save weights"; } if (ub) ub.disabled = false;
+    }
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "gross" || e.target.id === "tareCustom")) { e.preventDefault(); addEntry(); } });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") save(); });
+
+  // ---------- shared store & identity ----------
+  userP.then(async user => {
+    if (!user) return;
+    try {
+      const me = await user.me(); myId = me?.id || null;
+      if (me?.name && !S.staffName) { S.staffName = me.name; save(); if (tab === "count" && !S.count) render(); }
+    } catch {}
+  });
+  async function resolveNames(list) {
+    const user = await userP; if (!user) return;
+    const ids = [...new Set(list.map(h => h.by).filter(id => id && !(id in names)))];
+    if (!ids.length) return;
+    try { const ps = await user.profiles(ids); ids.forEach(id => { names[id] = ps?.[id]?.name || ""; }); } catch {}
+  }
+  dbP.then(db => {
+    if (!db) return;
+    db.collection("counts").orderBy("submittedAt", "desc").limit(200).onSnapshot(async snap => {
+      dbCounts = snap.docs.map(d => d.data()).filter(Boolean);
+      await resolveNames(dbCounts);
+      S.pending = S.pending.filter(id => !dbCounts.some(h => h.id === id)); save();
+      if (tab === "prev" || (tab === "count" && !S.count && S.view.screen === "home")) render();
+    }, () => {});
+    retryPending();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
