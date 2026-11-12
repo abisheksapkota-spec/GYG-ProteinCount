@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Protein Count</title>
+<meta name="theme-color" content="#1c1a17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Protein Count">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <h1>Protein <span>Count</span></h1>
+      <span class="clock num" id="clock"></span>
+    </div>
+    <nav id="nav">
+      <button data-tab="count" class="active">Count</button>
+      <button data-tab="mine">My reports</button>
+    </nav>
+  </div>
+  <div class="tape"></div>
+  <div class="offline" id="offline" hidden>Offline. Everything you enter is still saved on this phone.</div>
+</header>
+<main id="view"></main>
+<div class="bar" id="bar" hidden><div class="bar-inner" id="barInner"></div></div>
+<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="toastAct" hidden></button></div>
+<div class="modal" id="modal" hidden>
+  <div class="card" role="dialog" aria-modal="true">
+    <p id="modalMsg"></p>
+    <textarea id="modalText" hidden readonly aria-label="Text to copy"></textarea>
+    <div class="row">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn primary" id="modalOk">OK</button>
+    </div>
+  </div>
+</div>
+<script src="/common.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

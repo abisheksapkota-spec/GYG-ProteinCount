@@ -1,11 +1,10 @@
 {
   "name": "night-protein-count",
-  "version": "1.0.0",
-  "description": "One-hand closing stock count for kitchen cooks: count prep containers, open packets and boxes, get kg totals, submit to the manager.",
+  "version": "2.0.0",
+  "description": "Browser end-to-end tests for the Night Protein Count web app.",
   "private": true,
   "scripts": {
-    "start": "npx --yes serve .",
-    "test": "node tests/acceptance.js"
+    "test:e2e": "node tests/e2e.js"
   },
   "devDependencies": {
     "playwright": "1.48.2"

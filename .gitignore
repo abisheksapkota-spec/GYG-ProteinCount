@@ -1,3 +1,10 @@
 node_modules/
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+data/
+*.db
 *.png
+!static/icon-*.png
 .DS_Store

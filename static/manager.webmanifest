@@ -1,0 +1,15 @@
+{
+  "name": "Protein Count Manager",
+  "short_name": "PC Manager",
+  "description": "Closing protein reports for managers",
+  "start_url": "/manager",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1c1a17",
+  "theme_color": "#1c1a17",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
