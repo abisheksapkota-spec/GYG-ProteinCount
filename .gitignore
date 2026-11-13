@@ -8,3 +8,7 @@ data/
 *.png
 !static/icon-*.png
 .DS_Store
+.neon
+.env
+.env.local
+.env.*.local

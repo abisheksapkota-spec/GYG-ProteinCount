@@ -187,3 +187,18 @@ def test_manager_adds_new_item_and_cooks_count_it(client):
     ck = cook_token(client, add_cook(client, mh, "Sam"))
     body = report(items=[{"pid": "ptomato1", "name": "Tomatoes", "units": [{"k": "box", "qty": 3, "each": 5}], "entries": []}])
     assert client.post("/api/reports", json=body, headers=ck).json()["total"] == 15
+
+
+def test_env_file_loading(tmp_path, monkeypatch):
+    from app import envfile
+    (tmp_path / ".env.local").write_text('# neon\nexport NPC_A="from-local"\nNPC_B=plain # note\n')
+    (tmp_path / ".env").write_text("NPC_A=from-env\nNPC_C='quoted'\n")
+    monkeypatch.setenv("NPC_B", "real-env-wins")
+    for k in ("NPC_A", "NPC_C"):
+        monkeypatch.delenv(k, raising=False)
+    envfile.load(tmp_path)
+    assert os.environ["NPC_A"] == "from-local"
+    assert os.environ["NPC_B"] == "real-env-wins"
+    assert os.environ["NPC_C"] == "quoted"
+    for k in ("NPC_A", "NPC_C"):
+        monkeypatch.delenv(k)

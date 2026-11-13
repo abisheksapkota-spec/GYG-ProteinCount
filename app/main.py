@@ -1,8 +1,8 @@
 """Night Protein Count: API + static web app.
 
 Run locally:  uvicorn app.main:app --reload
-Environment:
-  DATABASE_URL      postgresql://... or mysql://... in production (default: SQLite file in ./data)
+Environment (also read from .env.local / .env, which `neon deploy` writes):
+  DATABASE_URL      postgresql://... (e.g. Neon, pooled) or mysql://... (default: SQLite file in ./data)
   SECRET_KEY        signs login tokens (default: generated once and stored in the database)
   MANAGER_PASSWORD  optional; if set it always works as the manager password (recovery)
 """
@@ -20,10 +20,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import envfile
 from .calc import DEFAULT_CONFIG, Invalid, validate_config, validate_report
 from .db import Database
 from .security import Lockout, Tokens, hash_secret, verify_secret
 
+envfile.load()
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
 

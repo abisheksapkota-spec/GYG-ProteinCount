@@ -92,13 +92,25 @@ uvicorn app.main:app --reload
 
 Open <http://localhost:8000/manager>, create the manager password and add your cooks. Cooks use <http://localhost:8000>.
 
+### Use your Neon database on your computer
+The project is linked to Neon (`neon.ts`, `.neon`). With the [Neon CLI](https://neon.com/docs/cli) signed in:
+
+```bash
+npm install               # @neon/config, used by neon.ts
+neon login                # once
+neon deploy               # writes DATABASE_URL and DATABASE_URL_UNPOOLED to .env.local
+uvicorn app.main:app --reload
+```
+
+The app reads `.env.local` (then `.env`) by itself and uses the pooled `DATABASE_URL`. `DATABASE_URL_UNPOOLED` is the direct connection, for tools like `pg_dump`. Both files are in `.gitignore`: never commit them. A variable set in the real environment (for example on Render) always wins over the files.
+
 To try it on your phone over home Wi-Fi, run `uvicorn app.main:app --host 0.0.0.0` and open `http://<your computer's IP>:8000`.
 
 ## Put it online (free): Render + Neon
 
 1. **Database:** create a free PostgreSQL database at [neon.tech](https://neon.tech) and copy its connection string (`postgresql://…`).
 2. **Server:** at [render.com](https://render.com), choose **New → Blueprint** and pick this GitHub repo. `render.yaml` sets everything up.
-3. When asked for `DATABASE_URL`, paste the Neon connection string.
+3. When asked for `DATABASE_URL`, paste the Neon **pooled** connection string (its host has `-pooler` in it; it's the `DATABASE_URL` in `.env.local`).
 4. Open `https://<your-app>.onrender.com/manager`, create the manager password and add cooks.
 5. On each phone, open the link and choose **Add to Home Screen**.
 

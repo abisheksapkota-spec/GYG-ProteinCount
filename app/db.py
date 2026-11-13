@@ -2,7 +2,7 @@
 
 Pick one with DATABASE_URL:
   (not set)                          SQLite file in ./data
-  postgresql://user:pass@host/db     PostgreSQL
+  postgresql://user:pass@host/db     PostgreSQL (Neon: use the pooled DATABASE_URL)
   mysql://user:pass@host:3306/db     MySQL 8 or MariaDB  (add ?ssl=true for cloud hosts)
 
 SQL is written once with `?` placeholders and adapted per database.
@@ -49,7 +49,10 @@ class Database:
             self.dialect = "pg"
             import psycopg
             from psycopg.rows import dict_row
-            self._connect = lambda: psycopg.connect(url, row_factory=dict_row)
+            # Neon's pooled host (-pooler) runs PgBouncer: skip server-side prepared statements.
+            # connect_timeout leaves room for a Neon database waking from scale-to-zero.
+            self._connect = lambda: psycopg.connect(url, row_factory=dict_row, prepare_threshold=None,
+                                                    **({} if "connect_timeout" in url else {"connect_timeout": 15}))
         elif url.startswith(("mysql://", "mysql+pymysql://", "mariadb://")):
             self.dialect = "mysql"
             import pymysql
