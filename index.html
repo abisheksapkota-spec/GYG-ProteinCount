@@ -152,6 +152,9 @@
   pre.summary { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace; margin: 0; overflow-x: auto; }
 
   /* Setup */
+  .kinds { display: flex; gap: 12px; flex-wrap: wrap; }
+  .kinds label { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+  .kinds input { width: auto; margin: 0; }
   .edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: end; }
 
   /* Bottom bar */
@@ -716,9 +719,13 @@
         <h2>Weights</h2>
         <p class="muted">The weight in kg of <b>one</b> of each. These are saved and used for every count, so only change them when a box or container size changes. Tap <b>Save weights</b> when done.</p>
         ${D.proteins.map(p => `<div class="card stack" data-pid="${p.id}" style="background:var(--bg)">
-          <label>Protein<input data-f="pname" value="${esc(p.name)}" style="background:var(--card)"></label>
+          <div class="edit-row" style="grid-template-columns:minmax(0,1fr) auto"><label>Item<input data-f="pname" value="${esc(p.name)}" placeholder="e.g. Tomatoes" maxlength="40" style="background:var(--card)"></label>
+          <button class="icon del" data-act="pdel" aria-label="Remove ${esc(p.name || "item")}">🗑</button></div>
+          <div class="kinds">${UNITS.map(u => `<label><input type="checkbox" data-f="use" data-k="${u.k}"${u.k in p.units ? " checked" : ""}> ${u.label}</label>`).join("")}</div>
           <div class="w3">${usedUnits(p).map(u => `<label>1 ${u.short} (kg)<input data-f="u.${u.k}" class="num" inputmode="decimal" value="${p.units[u.k] || ""}" placeholder="Not set" style="background:var(--card)${p.units[u.k] > 0 ? "" : ";border-color:var(--chilli)"}"></label>`).join("")}</div>
         </div>`).join("")}
+        <button class="btn" data-act="padd">+ Add item</button>
+        <p class="muted">Add anything you want counted, like tomatoes. Tick how it's counted, then type the weight of one.</p>
       </div>`;
     setBar(`<button class="btn shrink" data-act="setupUndo"${setupDirty ? "" : " disabled"}>Undo</button><button class="btn primary" data-act="setupSave"${setupDirty ? "" : " disabled"}>${setupDirty ? "Save weights" : "Weights saved"}</button>`);
   }
@@ -743,7 +750,10 @@
       if (!t.name) { toast("Every container needs a name"); return; }
       if (!(t.kg > 0)) { toast(`Enter the empty weight of ${t.name}`); return; }
     }
-    if (D.proteins.some(p => !p.name.trim())) { toast("Every protein needs a name"); return; }
+    if (!D.proteins.length) { toast("Keep at least one item to count"); return; }
+    if (D.proteins.some(p => !p.name.trim())) { toast("Every item needs a name"); return; }
+    const noUnit = D.proteins.find(p => !Object.keys(p.units).length);
+    if (noUnit) { toast(`${noUnit.name}: tick prep, packets or boxes`); return; }
     D.proteins.forEach(p => p.name = p.name.trim());
     D.updatedAt = Date.now();
     cfg = clone(D); S.cfg = clone(D); save(); setupDirty = false; renderSetup();
@@ -809,6 +819,15 @@
     else if (act === "retry") { toast("Sending…"); retryPending(); }
     else if (act === "tadd") { setupDraft.tares.push({ id: uid(), name: "", kg: 0 }); setupDirty = true; renderSetup(); const ins = document.querySelectorAll('[data-f="tname"]'); ins[ins.length - 1]?.focus(); }
     else if (act === "tdel") { setupDraft.tares = setupDraft.tares.filter(t => t.id !== el.closest("[data-tid]").dataset.tid); setupDirty = true; renderSetup(); }
+    else if (act === "padd") {
+      setupDraft.proteins.push({ id: "p" + uid(), name: "", units: { box: 0 } }); setupDirty = true; renderSetup();
+      const ins = document.querySelectorAll('[data-f="pname"]'); ins[ins.length - 1]?.focus();
+    }
+    else if (act === "pdel") {
+      const pid = el.closest("[data-pid]").dataset.pid, p = setupDraft.proteins.find(x => x.id === pid);
+      if (p.name.trim() && !(await ask(`Remove ${p.name} from the count? Old reports keep it.`, { ok: "Remove" }))) return;
+      setupDraft.proteins = setupDraft.proteins.filter(x => x.id !== pid); setupDirty = true; renderSetup();
+    }
     else if (act === "setupUndo") { setupDraft = null; setupDirty = false; renderSetup(); }
     else if (act === "setupSave") saveSetup();
   });
@@ -822,6 +841,11 @@
     else if (t.id === "gross") { draft().gross = t.value; save(); updateNetLine(); }
     else if (t.id === "tareCustom") { draft().tareCustom = t.value; save(); updateNetLine(); }
     else if (t.id === "tareSel") { draft().tare = t.value; $("customWrap").hidden = t.value !== "custom"; save(); updateNetLine(); if (t.value === "custom") $("tareCustom").focus(); }
+    else if (t.dataset.f === "use" && setupDraft) {
+      const x = setupDraft.proteins.find(q => q.id === t.closest("[data-pid]").dataset.pid);
+      if (t.checked) x.units[t.dataset.k] = x.units[t.dataset.k] || 0; else delete x.units[t.dataset.k];
+      setupDirty = true; renderSetup();
+    }
     else if (t.dataset.f && setupDraft) {
       setupDirty = true;
       const tr = t.closest("[data-tid]"), pr = t.closest("[data-pid]");

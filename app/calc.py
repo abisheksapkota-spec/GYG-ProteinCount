@@ -70,7 +70,7 @@ def validate_config(body) -> dict:
     if not isinstance(body, dict) or not isinstance(body.get("proteins"), list):
         raise Invalid("proteins list is required")
     if not 1 <= len(body["proteins"]) <= 30:
-        raise Invalid("between 1 and 30 proteins")
+        raise Invalid("keep between 1 and 30 items")
     seen, proteins = set(), []
     for p in body["proteins"]:
         if not isinstance(p, dict):

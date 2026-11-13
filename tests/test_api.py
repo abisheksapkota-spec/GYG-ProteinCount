@@ -176,3 +176,14 @@ def test_cook_sees_only_own_reports(client):
     assert len(client.get("/api/my/reports", headers=ta).json()) == 1
     assert client.get("/api/my/reports", headers=tb).json() == []
     assert client.get(f"/api/my/reports/{rid}", headers=tb).status_code == 404
+
+
+def test_manager_adds_new_item_and_cooks_count_it(client):
+    mh = manager_token(client)
+    conf = client.get("/api/config").json()
+    conf["proteins"].append({"id": "ptomato1", "name": "Tomatoes", "units": {"box": 5}})
+    assert client.put("/api/config", json=conf, headers=mh).status_code == 200
+    assert "Tomatoes" in [p["name"] for p in client.get("/api/config").json()["proteins"]]
+    ck = cook_token(client, add_cook(client, mh, "Sam"))
+    body = report(items=[{"pid": "ptomato1", "name": "Tomatoes", "units": [{"k": "box", "qty": 3, "each": 5}], "entries": []}])
+    assert client.post("/api/reports", json=body, headers=ck).json()["total"] == 15

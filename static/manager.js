@@ -173,12 +173,13 @@ async function renderWeights() {
       <p class="muted">The weight in kg of <b>one</b> of each. Saved for every count on every phone. Change them only when a box or container size changes.</p>
     </div>
     ${W.proteins.map((p, i) => `<div class="card stack" data-pi="${i}">
-      <div class="two" style="grid-template-columns:minmax(0,1fr) auto;align-items:end"><label>Protein<input data-f="name" value="${esc(p.name)}" maxlength="40"></label>
-      <button class="icon del" data-act="delProtein" aria-label="Remove ${esc(p.name)}">🗑</button></div>
+      <div class="two" style="grid-template-columns:minmax(0,1fr) auto;align-items:end"><label>Item<input data-f="name" value="${esc(p.name)}" placeholder="e.g. Tomatoes" maxlength="40"></label>
+      <button class="icon del" data-act="delProtein" aria-label="Remove ${esc(p.name || "item")}">🗑</button></div>
       <div class="kinds">${UNITS.map(u => `<label><input type="checkbox" data-f="use" data-k="${u.k}"${u.k in p.units ? " checked" : ""}> ${u.label}</label>`).join("")}</div>
       <div class="w3">${UNITS.filter(u => u.k in p.units).map(u => `<label>1 ${u.short} (kg)<input data-f="w" data-k="${u.k}" class="num" inputmode="decimal" value="${p.units[u.k] || ""}" placeholder="Not set"${p.units[u.k] > 0 ? "" : ' style="border-color:var(--chilli)"'}></label>`).join("")}</div>
     </div>`).join("")}
-    <button class="btn" data-act="addProtein">+ Add protein</button>
+    <button class="btn" data-act="addProtein">+ Add item</button>
+    <p class="muted">Add anything you want counted, like tomatoes. Tick how it's counted, type the weight of one, then Save. Cooks see it on their next count.</p>
     <div class="card stack">
       <p class="eyebrow">Empty containers (for weighing odd leftovers)</p>
       ${W.tares.map((t, i) => `<div class="edit-row" data-ti="${i}">
@@ -227,18 +228,20 @@ document.addEventListener("click", async e => {
       await call(`/api/manager/cooks/${id}`, { method: "PATCH", body: { active: !c.active } }); renderCooks();
     }
     else if (act === "logout") { saveToken(null); cooks = []; render(); }
-    else if (act === "addProtein") { W.proteins.push({ id: "p" + uid().slice(-8), name: "New protein", units: { prep: 0, pack: 0, box: 0 } }); wDirty = true; renderWeights(); }
+    else if (act === "addProtein") { W.proteins.push({ id: "p" + uid().slice(-8), name: "", units: { box: 0 } }); wDirty = true; renderWeights();
+      const ins = document.querySelectorAll('[data-f="name"]'); ins[ins.length - 1]?.focus(); }
     else if (act === "delProtein") {
       const i = Number(el.closest("[data-pi]").dataset.pi);
-      if (!(await ask(`Remove ${W.proteins[i].name} from the count?`, { ok: "Remove" }))) return;
+      if (W.proteins[i].name.trim() && !(await ask(`Remove ${W.proteins[i].name} from the count? Old reports keep it.`, { ok: "Remove" }))) return;
       W.proteins.splice(i, 1); wDirty = true; renderWeights();
     }
     else if (act === "addTare") { W.tares.push({ id: "t" + uid().slice(-8), name: "", kg: 0 }); wDirty = true; renderWeights(); }
     else if (act === "delTare") { W.tares.splice(Number(el.closest("[data-ti]").dataset.ti), 1); wDirty = true; renderWeights(); }
     else if (act === "undoW") { W = null; wDirty = false; renderWeights(); }
     else if (act === "saveW") {
+      if (!W.proteins.length) return toast("Keep at least one item to count");
       for (const p of W.proteins) {
-        if (!p.name.trim()) return toast("Every protein needs a name");
+        if (!p.name.trim()) return toast("Every item needs a name");
         if (!Object.keys(p.units).length) return toast(`${p.name}: tick at least one of prep, packets or boxes`);
       }
       for (const t of W.tares) if (!t.name.trim() || !(t.kg > 0)) return toast("Each container needs a name and an empty weight");

@@ -134,7 +134,7 @@ function renderHome() {
       <div class="card stack">
         <p class="eyebrow">Closing</p>
         <h2>${esc(dayFmt(Date.now()))}</h2>
-        <p class="muted">Hi ${esc(S.cook?.name)}. Count all ${proteins().length} proteins, then submit the report to your manager.</p>
+        <p class="muted">Hi ${esc(S.cook?.name)}. Count all ${proteins().length} items, then submit the report to your manager.</p>
         <button class="btn primary block" data-act="start"${proteins().length ? "" : " disabled"}>Start closing count</button>
       </div>
       ${S.pending.length ? `<div class="card"><p class="err">${S.pending.length} report${S.pending.length === 1 ? "" : "s"} waiting to send. They send automatically when there's signal.</p></div>` : ""}`;
@@ -198,7 +198,7 @@ function renderProtein(pid) {
   }).join("");
 
   $("view").innerHTML = `
-    <div class="back"><button class="btn small ghost" data-act="home">‹ All proteins</button><span class="muted num">${idx + 1} of ${proteins().length}</span></div>
+    <div class="back"><button class="btn small ghost" data-act="home">‹ All items</button><span class="muted num">${idx + 1} of ${proteins().length}</span></div>
     <div class="card stack">
       <div class="p-title"><h2>${esc(p.name)}</h2><span class="p-total num" id="pTotal">${f2(s.total)}<small>kg</small></span></div>
       <p class="muted num" id="pSplit">Prepared ${f2(s.prepared)} kg · Unopened ${f2(s.unopened)} kg</p>
