@@ -203,7 +203,7 @@
   </div>
 </div>
 </template>
-<script type="application/json" id="cfg">{"v":2,"updatedAt":1794375080565,"proteins":[{"id":"chk","name":"Chicken","units":{"prep":7.5,"box":7.5}},{"id":"gbf","name":"Ground Beef","units":{"prep":6,"pack":2,"box":16}},{"id":"bri","name":"Brisket","units":{"prep":6,"pack":2,"box":16}},{"id":"rib","name":"BBQ Beef Rib","units":{"prep":6,"pack":2,"box":16}},{"id":"pp","name":"Pulled Pork","units":{"prep":6,"pack":2,"box":16}},{"id":"avo","name":"Avocado","units":{"box":10}}],"tares":[]}</script>
+<script type="application/json" id="cfg">{"v":3,"updatedAt":1794375080565,"proteins":[{"id":"chk","name":"Chicken","units":{"prep":7.5,"box":7.5}},{"id":"gbf","name":"Ground Beef","units":{"prep":6,"pack":2,"box":16}},{"id":"bri","name":"Brisket","units":{"prep":6,"pack":2,"box":16}},{"id":"rib","name":"BBQ Beef Rib","units":{"prep":6,"pack":2,"box":16}},{"id":"pp","name":"Pulled Pork","units":{"prep":6,"pack":2,"box":16}},{"id":"avo","name":"Avocado","units":{"box":10}},{"id":"guac","name":"Guac","units":{"prep":4.5}},{"id":"fries","name":"Fries","units":{"box":15}},{"id":"rice","name":"Rice","units":{"bag":10}}],"tares":[]}</script>
 <script id="app-js">
 (() => {
   const shell = document.getElementById("shell");
@@ -238,13 +238,25 @@
     S = { cfg: null, count: null, history: old?.history || [], staffName: old?.current?.staff || "", pending: [], view: { screen: "home" } };
   }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+  // Saved counts are kept for 7 days, then deleted automatically.
+  const KEEP_DAYS = 7, KEEP_MS = KEEP_DAYS * 24 * 60 * 60 * 1000;
+  const fresh = h => { const t = Date.parse(h.submittedAt || h.savedAt || h.date || ""); return isFinite(t) && Date.now() - t < KEEP_MS; };
+  function pruneOld() {
+    const before = S.history.length;
+    S.history = S.history.filter(fresh);
+    S.pending = S.pending.filter(id => S.history.some(h => h.id === id));
+    if (S.history.length !== before) save();
+  }
+  pruneOld();
   // Older setups (before count units) are ignored so everyone gets the unit weights.
   // v2 setups list only the units a protein uses (a 0 weight there means "not set yet").
   const norm = c => { c.tares = c.tares || []; c.proteins.forEach(p => {
     p.units = p.units || { box: p.boxKg || 0 }; delete p.boxKg;
     if (!c.v) Object.keys(p.units).forEach(k => { if (!(p.units[k] > 0)) delete p.units[k]; });
-  }); c.v = 2; return c; };
-  let cfg = norm((S.cfg && S.cfg.v === 2 && S.cfg.updatedAt > (EMB.updatedAt || 0)) ? S.cfg : EMB);
+  });
+    if ((c.v || 0) < 3) EMB.proteins.filter(p => ["guac", "fries", "rice"].includes(p.id) && !c.proteins.some(q => q.id === p.id)).forEach(p => c.proteins.push(clone(p)));
+    c.v = 3; return c; };
+  let cfg = norm((S.cfg && S.cfg.v >= 2 && S.cfg.updatedAt > (EMB.updatedAt || 0)) ? S.cfg : EMB);
   save();
 
   let tab = "count";
@@ -296,6 +308,7 @@
     { k: "prep", label: "Prep containers", short: "prep",   plural: "prep",    type: "prepared", step: 0.5 },
     { k: "pack", label: "Open packets",    short: "packet", plural: "packets", type: "unopened", step: 1 },
     { k: "box",  label: "Boxes",           short: "box",    plural: "boxes",   type: "unopened", step: 1 },
+    { k: "bag",  label: "Bags",            short: "bag",    plural: "bags",    type: "unopened", step: 1 },
   ];
   const usedUnits = p => UNITS.filter(u => u.k in p.units);
   const unsetWeights = () => cfg.proteins.filter(p => usedUnits(p).some(u => !(p.units[u.k] > 0) && Number(S.count?.proteins[p.id]?.units?.[u.k]) > 0));
@@ -675,9 +688,10 @@
   }
   function renderPrev() {
     setBar("");
+    pruneOld();
     const list = allPrevious();
     const v4 = list.filter(h => h.v === 4);
-    const head = `<div class="card"><p class="eyebrow">Previous closing counts</p><p class="muted" style="margin-top:4px">${dbCounts ? "Counts submitted by everyone on this page, newest first." : "Counts saved on this phone, newest first."} Changes are compared with the count before.</p></div>`;
+    const head = `<div class="card"><p class="eyebrow">Previous closing counts</p><p class="muted" style="margin-top:4px">${dbCounts ? "Counts submitted by everyone on this page, newest first." : "Counts saved on this phone, newest first."} Changes are compared with the count before. Counts are kept for ${KEEP_DAYS} days, then deleted automatically.</p></div>`;
     if (!list.length) { $("view").innerHTML = head + `<div class="card muted">No counts yet. Submitted closing counts will show here.</div>`; return; }
     $("view").innerHTML = head + list.map(h => {
       if (h.v !== 4) return `<div class="card stack"><p class="eyebrow">Older format · ${esc(h.date || "")}</p><pre class="summary">${esc(legacyText(h))}</pre></div>`;
@@ -875,7 +889,9 @@
   dbP.then(db => {
     if (!db) return;
     db.collection("counts").orderBy("submittedAt", "desc").limit(200).onSnapshot(async snap => {
-      dbCounts = snap.docs.map(d => d.data()).filter(Boolean);
+      const docs = snap.docs.map(d => d.data()).filter(Boolean);
+      dbCounts = docs.filter(fresh);
+      docs.filter(h => h.id && !fresh(h)).forEach(h => { try { Promise.resolve(db.collection("counts").doc(h.id).delete()).catch(() => {}); } catch {} });
       await resolveNames(dbCounts);
       S.pending = S.pending.filter(id => !dbCounts.some(h => h.id === id)); save();
       if (tab === "prev" || (tab === "count" && !S.count && S.view.screen === "home")) render();
@@ -883,6 +899,7 @@
     retryPending();
   });
 
+  setInterval(() => { pruneOld(); if (tab === "prev") render(); }, 60 * 60 * 1000);
   render();
 })();
 </script>
