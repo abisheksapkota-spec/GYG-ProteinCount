@@ -506,22 +506,13 @@
     return q ? `${q} × ${fmtW(w)} kg = <b>${f2(q * w)} kg</b>` : `${fmtW(w)} kg each`;
   }
   const fmtW = w => String(r2(w));
-  // Step-by-step log of what was entered, saved with the count (quick retyping of one box is merged into one line).
-  function logStep(text, key, from) {
-    if (!S.count) return;
-    const log = S.count.log = S.count.log || [], last = log[log.length - 1], now = new Date().toISOString();
-    if (key && last && last.key === key && Date.now() - Date.parse(last.at) < 120000) { last.at = now; last.text = text(last.from); return; }
-    log.push({ at: now, key: key || null, from, text: text(from) });
-  }
   function setUnit(pid, k, raw, fromInput) {
     const p = cfg.proteins.find(x => x.id === pid), u = UNITS.find(x => x.k === k), c = pc(pid);
     const row = document.querySelector(`.c-row[data-k="${k}"]`), err = row?.querySelector("[data-uerr]");
     const v = typeof raw === "number" ? { value: raw } : parseQty(u, raw);
     if (v.error) { if (err) { err.hidden = false; err.textContent = v.error; } return; }
     if (err) err.hidden = true;
-    const old = c.units[k];
     if (v.empty) delete c.units[k]; else { c.units[k] = v.value; c.zero = false; }
-    if (old !== c.units[k]) { const now = c.units[k]; logStep(f => `${p.name}: ${u.label.toLowerCase()} ${f ?? "–"} → ${now ?? "cleared"}`, pid + ":" + k, old); }
     save();
     if (row) {
       row.querySelector("[data-info]").innerHTML = unitInfo(p, u);
@@ -562,13 +553,10 @@
     const list = pc(pid).entries;
     if (S.view.edit) {
       const e = list.find(x => x.id === S.view.edit);
-      const before = f2(net(e));
       Object.assign(e, { type: d.type, gross: v.gross, tare: v.tare, tareName: v.tareName });
-      logStep(() => `${cfg.proteins.find(x => x.id === pid).name}: changed a weighed container ${before} → ${f2(net(e))} kg ${TYPES[d.type].toLowerCase()}`);
       S.view.edit = null; toast(`Container updated · ${f2(net(e))} kg`);
     } else {
       list.push({ id: uid(), type: d.type, gross: v.gross, tare: v.tare, tareName: v.tareName, at: new Date().toISOString() });
-      logStep(() => `${cfg.proteins.find(x => x.id === pid).name}: weighed ${f2(v.gross)}${v.tare ? " − " + f2(v.tare) : ""} = ${f2(v.gross - v.tare)} kg ${TYPES[d.type].toLowerCase()}`);
       toast(`Added ${f2(v.gross - v.tare)} kg ${TYPES[d.type].toLowerCase()}`);
     }
     pc(pid).zero = false; d.gross = "";
@@ -618,7 +606,7 @@
     });
     return { id: S.count.id, v: 4, startedAt: S.count.startedAt, submittedAt: new Date().toISOString(),
              staffName: S.count.staffName, by: myId || null, notes: S.count.notes || "", total: grand(), items,
-             log: (S.count.log || []).map(x => ({ at: x.at, text: x.text })) };
+             setup: cfg.proteins.map(p => ({ pid: p.id, name: p.name, units: { ...p.units } })) };
   }
   function reportText(h) {
     if (h.v !== 4) return legacyText(h);
@@ -677,9 +665,9 @@
   }
 
   // ---------- GITHUB LOG ----------
-  // After every submitted count, files are saved in GitHub under a folder for each cook:
-  //   count-logs/Abhi/2026-11-09 23-30.md    (the count, changes since the last count, what was entered step by step)
-  //   count-logs/Abhi/2026-11-09 23-30.json  (the same count as data)
+  // Everything is saved in GitHub in one folder per month, oldest to newest:
+  //   count-logs/2026-11/2026-11-09 22-10 Weight change - Abhi.md
+  //   count-logs/2026-11/2026-11-09 23-30 Count - Abhi.md   (+ .json with the same count as data)
   // The repo and token are kept on this phone only; they are never put in the shared page.
   const GH_KEY = "npc.github";
   let GH = loadKey(GH_KEY) || { repo: "", dir: "count-logs", token: "", queue: [] };
@@ -693,6 +681,23 @@
   const md = t => String(t ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const sign = d => d === 0 ? "±0.00" : (d > 0 ? "▲ +" : "▼ ") + f2(d);
 
+  // What changed in Weights between two setups (lists of { pid, name, units }).
+  function setupDiff(before, after) {
+    const out = [], w = (u, kg) => `1 ${u.short} = ${kg > 0 ? fmtW(kg) + " kg" : "not set"}`;
+    after.forEach(p => {
+      const o = before.find(x => x.pid === p.pid);
+      if (!o) { out.push(`- **${md(p.name)}:** added (${usedUnits(p).map(u => w(u, p.units[u.k])).join(", ")})`); return; }
+      if (o.name !== p.name) out.push(`- **${md(p.name)}:** renamed from ${md(o.name)}`);
+      UNITS.forEach(u => {
+        const a = o.units[u.k], b = p.units[u.k];
+        if (a === undefined && b !== undefined) out.push(`- **${md(p.name)}:** now counted in ${u.plural} (${w(u, b)})`);
+        else if (a !== undefined && b === undefined) out.push(`- **${md(p.name)}:** no longer counted in ${u.plural}`);
+        else if (a !== undefined && r2(a) !== r2(b)) out.push(`- **${md(p.name)}:** weight of 1 ${u.short} ${a > 0 ? fmtW(a) : "not set"} → ${b > 0 ? fmtW(b) + " kg" : "not set"}`);
+      });
+    });
+    before.filter(o => !after.some(p => p.pid === o.pid)).forEach(o => out.push(`- **${md(o.name)}:** removed from the list`));
+    return out;
+  }
   function ghReadme(rec, prev) {
     const prevItem = pid => prev?.items?.find(i => i.pid === pid);
     const counted = rec.items.filter(i => i.counted).length;
@@ -708,7 +713,6 @@
       `# Closing count: ${md(rec.staffName)} - ${dayFmt(rec.submittedAt)}`, "",
       "| | |", "|---|---|",
       `| Counted by | ${md(rec.staffName)} |`,
-      `| Started | ${dayFmt(rec.startedAt)}, ${timeFmt(rec.startedAt)} |`,
       `| Submitted | ${dayFmt(rec.submittedAt)}, ${timeFmt(rec.submittedAt)} |`,
       `| Total | **${f2(rec.total)} kg** |`,
       `| Items counted | ${counted} of ${rec.items.length}${counted < rec.items.length ? " ⚠" : ""} |`, "",
@@ -732,21 +736,35 @@
       prev.items.filter(p => !rec.items.some(i => i.pid === p.pid)).forEach(p => L.push(`- **${md(p.name)}:** no longer on the list (was ${f2(p.total)} kg)`));
       if (L[L.length - 1].startsWith("- **Total:**")) L.push("- No item changed.");
     }
-    L.push("", "## What was entered (step by step)", "");
-    if (rec.log?.length) rec.log.forEach(x => L.push(`- ${timeFmt(x.at)} · ${md(x.text)}`));
-    else L.push("No steps recorded.");
-    L.push(`- ${timeFmt(rec.submittedAt)} · Submitted, ${f2(rec.total)} kg total`);
+    if (prev?.setup && rec.setup) {
+      const lines = setupDiff(prev.setup, rec.setup);
+      L.push("", "## Setup changes since the last count", "", ...(lines.length ? lines : ["No weights or items changed."]));
+    }
     L.push("", "## Notes", "", rec.notes ? rec.notes : "No notes.", "");
     return L.join("\n");
   }
   function ghQueue(rec) {
     if (!ghReady()) return;
     const prev = allPrevious().filter(h => h.v === 4 && h.id !== rec.id && (h.submittedAt || "") < rec.submittedAt)[0] || null;
-    const who = person(rec.staffName);
-    GH.queue.push({ id: rec.id, person: who, base: `${ymd(rec.submittedAt)} ${hm(rec.submittedAt)}`, stem: null, done: [],
-      title: `Closing count: ${who}, ${ymd(rec.submittedAt)} ${hm(rec.submittedAt).replace("-", ":")} (${f2(rec.total)} kg)`,
-      files: { ".md": ghReadme(rec, prev), ".json": JSON.stringify({ ...rec, comparedWith: prev ? prev.id : null }, null, 2) + "\n" } });
+    const who = person(rec.staffName), at = rec.submittedAt;
+    GH.queue.push({ id: rec.id, month: ymd(at).slice(0, 7), base: `${ymd(at)} ${hm(at)} Count - ${who}`, stem: null, done: [],
+      title: `Closing count: ${who}, ${ymd(at)} ${hm(at).replace("-", ":")} (${f2(rec.total)} kg)`,
+      files: { ".md": ghReadme(rec, prev), ".json": JSON.stringify((({ startedAt, by, ...data }) => ({ ...data, comparedWith: prev ? prev.id : null }))(rec), null, 2) + "\n" } });
     ghSave();
+  }
+  function ghQueueWeights(before, after) {
+    if (!ghReady()) return;
+    const lines = setupDiff(before.proteins.map(p => ({ pid: p.id, name: p.name, units: p.units })), after.proteins.map(p => ({ pid: p.id, name: p.name, units: p.units })));
+    const tare = t => `${t.name} ${fmtW(t.kg)} kg`, bt = (before.tares || []).map(tare), at2 = (after.tares || []).map(tare);
+    at2.filter(x => !bt.includes(x)).forEach(x => lines.push(`- **Empty container:** ${md(x)} added or changed`));
+    bt.filter(x => !at2.includes(x)).forEach(x => lines.push(`- **Empty container:** ${md(x)} removed or changed`));
+    if (!lines.length) return;
+    const at = new Date().toISOString(), who = S.staffName ? person(S.staffName) : "Unknown";
+    const text = [`# Weight change - ${dayFmt(at)}, ${timeFmt(at)}`, "", `Changed by: ${md(who)} (the name last typed on this phone)`, "", ...lines, "",
+      "## Weights now", "", ...after.proteins.map(p => `- ${md(p.name)}: ${usedUnits(p).map(u => `1 ${u.short} = ${p.units[u.k] > 0 ? fmtW(p.units[u.k]) + " kg" : "not set"}`).join(", ")}`), ""].join("\n");
+    GH.queue.push({ id: "w" + uid(), month: ymd(at).slice(0, 7), base: `${ymd(at)} ${hm(at)} Weight change - ${who}`, stem: null, done: [],
+      title: `Weight change: ${who}, ${ymd(at)} ${hm(at).replace("-", ":")}`, files: { ".md": text } });
+    ghSave(); ghFlush();
   }
   const b64 = str => { const bytes = new TextEncoder().encode(str); let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); };
   const ghPath = parts => parts.filter(Boolean).flatMap(x => String(x).split("/")).filter(Boolean).map(encodeURIComponent).join("/");
@@ -761,11 +779,11 @@
     ghBusy = true;
     try {
       for (const job of [...GH.queue]) {
-        if (!job.person) { GH.queue = GH.queue.filter(j => j !== job); continue; }   // old format from a test build
-        if (!job.stem) {   // "2026-11-09 23-30", or "2026-11-09 23-30 (2)" if that minute is already taken
+        if (!job.month) { GH.queue = GH.queue.filter(j => j !== job); continue; }   // old format from a test build
+        if (!job.stem) {   // add " (2)" if a file with that name is already there
           for (let n = 1; n < 50; n++) {
             const name = n === 1 ? job.base : `${job.base} (${n})`;
-            const r = await gh(`/contents/${ghPath([GH.dir, job.person, name + ".md"])}`);
+            const r = await gh(`/contents/${ghPath([GH.dir, job.month, name + ".md"])}`);
             if (r.status === 404) { job.stem = name; break; }
             if (!r.ok) throw new Error("GitHub " + r.status);
           }
@@ -774,11 +792,11 @@
         }
         for (const [ext, text] of Object.entries(job.files)) {
           if (job.done.includes(ext)) continue;
-          const r = await gh(`/contents/${ghPath([GH.dir, job.person, job.stem + ext])}`, { method: "PUT", body: JSON.stringify({ message: job.title, content: b64(text) }) });
+          const r = await gh(`/contents/${ghPath([GH.dir, job.month, job.stem + ext])}`, { method: "PUT", body: JSON.stringify({ message: job.title, content: b64(text) }) });
           if (!r.ok) throw new Error("GitHub " + r.status);
           job.done.push(ext); ghSave();
         }
-        const where = `${job.person}/${job.stem}`;
+        const where = `${job.month}/${job.stem}`;
         GH.queue = GH.queue.filter(j => j !== job); GH.lastSent = { folder: where, at: new Date().toISOString() }; ghSave();
         toast(`Log saved to GitHub: ${where}`);
       }
@@ -788,7 +806,7 @@
   function ghCard() {
     return `<div class="card stack" id="ghCard">
       <h2 style="font-size:20px">GitHub log</h2>
-      <p class="muted">After every submitted count, a file named by <b>date and time</b> is saved in GitHub, in a folder for each cook (e.g. <b>Abhi/2026-11-09 23-30</b>), with the count, the changes since the last count, and what was entered step by step. Set this up once on each phone that submits counts. It stays on this phone only.</p>
+      <p class="muted">Every submitted count and every weight change is saved in GitHub, in a folder for each month, named by date, time and name (e.g. <b>2026-11/2026-11-09 23-30 Count - Abhi</b>). Each count shows the change since the last count and any weight or item changes. Set this up once on each phone that submits counts. It stays on this phone only.</p>
       <label>Repository (owner/name)<input id="ghRepo" value="${esc(GH.repo)}" placeholder="e.g. your-name/protein-count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Folder in the repo<input id="ghDir" value="${esc(GH.dir)}" placeholder="count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Access token<input id="ghToken" type="password" value="" placeholder="${GH.token ? "Saved. Type a new one to change it" : "github_pat_…"}" autocomplete="off" spellcheck="false"></label>
@@ -938,6 +956,7 @@
     const noUnit = D.proteins.find(p => !Object.keys(p.units).length);
     if (noUnit) { toast(`${noUnit.name}: tick prep, packets or boxes`); return; }
     D.proteins.forEach(p => p.name = p.name.trim());
+    ghQueueWeights(cfg, D);
     D.updatedAt = Date.now();
     cfg = clone(D); S.cfg = clone(D); save(); setupDirty = false; renderSetup();
     const art = await artP;
@@ -984,11 +1003,10 @@
     else if (act === "del") {
       const list = pc(S.view.pid).entries, i = list.findIndex(x => x.id === el.dataset.eid), [gone] = list.splice(i, 1), pid = S.view.pid;
       if (S.view.edit === gone.id) { S.view.edit = null; draft().gross = ""; }
-      logStep(() => `${cfg.proteins.find(x => x.id === pid).name}: deleted a weighed container (${f2(net(gone))} kg)`);
       save(); renderProtein(pid);
       toast(`Deleted ${f2(net(gone))} kg`, { action: "Undo", onAction: () => { pc(pid).entries.splice(i, 0, gone); save(); if (S.view.pid === pid) renderProtein(pid); } });
     }
-    else if (act === "zero") { const c = pc(S.view.pid); c.zero = !c.zero; logStep(() => `${cfg.proteins.find(x => x.id === S.view.pid).name}: ${c.zero ? "marked none in stock" : "unmarked none in stock"}`); save(); renderProtein(S.view.pid); if (c.zero) toast("Marked as none in stock"); }
+    else if (act === "zero") { const c = pc(S.view.pid); c.zero = !c.zero; save(); renderProtein(S.view.pid); if (c.zero) toast("Marked as none in stock"); }
     else if (act === "next") {
       const pid = S.view.pid, d = draft();
       if (!(await keepTyped())) return;
