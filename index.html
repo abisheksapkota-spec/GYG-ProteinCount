@@ -677,14 +677,17 @@
   }
 
   // ---------- GITHUB LOG ----------
-  // After every submitted count, a folder "<cook> - <date>" is made in a GitHub repo with README.md
-  // (the count, changes since the last count, and what was entered step by step) and count.json.
+  // After every submitted count, files are saved in GitHub under a folder for each cook:
+  //   count-logs/Abhi/2026-11-09 23-30.md    (the count, changes since the last count, what was entered step by step)
+  //   count-logs/Abhi/2026-11-09 23-30.json  (the same count as data)
   // The repo and token are kept on this phone only; they are never put in the shared page.
   const GH_KEY = "npc.github";
   let GH = loadKey(GH_KEY) || { repo: "", dir: "count-logs", token: "", queue: [] };
   GH.queue = GH.queue || [];
   const ghSave = () => { try { localStorage.setItem(GH_KEY, JSON.stringify(GH)); } catch {} };
   const ghReady = () => !!(GH.repo && GH.token);
+  const hm = d => { const x = new Date(d); return `${String(x.getHours()).padStart(2, "0")}-${String(x.getMinutes()).padStart(2, "0")}`; };
+  const person = n => safeName(n).toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());   // "abhi" and "Abhi" share one folder
   const ymd = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
   const safeName = n => (String(n || "").replace(/[\\/:*?"<>|#%\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40)) || "Unknown";
   const md = t => String(t ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
@@ -739,9 +742,10 @@
   function ghQueue(rec) {
     if (!ghReady()) return;
     const prev = allPrevious().filter(h => h.v === 4 && h.id !== rec.id && (h.submittedAt || "") < rec.submittedAt)[0] || null;
-    GH.queue.push({ id: rec.id, base: `${safeName(rec.staffName)} - ${ymd(rec.submittedAt)}`, folder: null, done: [],
-      title: `Closing count: ${safeName(rec.staffName)} - ${ymd(rec.submittedAt)} (${f2(rec.total)} kg)`,
-      files: { "README.md": ghReadme(rec, prev), "count.json": JSON.stringify({ ...rec, comparedWith: prev ? prev.id : null }, null, 2) + "\n" } });
+    const who = person(rec.staffName);
+    GH.queue.push({ id: rec.id, person: who, base: `${ymd(rec.submittedAt)} ${hm(rec.submittedAt)}`, stem: null, done: [],
+      title: `Closing count: ${who}, ${ymd(rec.submittedAt)} ${hm(rec.submittedAt).replace("-", ":")} (${f2(rec.total)} kg)`,
+      files: { ".md": ghReadme(rec, prev), ".json": JSON.stringify({ ...rec, comparedWith: prev ? prev.id : null }, null, 2) + "\n" } });
     ghSave();
   }
   const b64 = str => { const bytes = new TextEncoder().encode(str); let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); };
@@ -757,24 +761,26 @@
     ghBusy = true;
     try {
       for (const job of [...GH.queue]) {
-        if (!job.folder) {   // "Sam - 2026-11-15", or "Sam - 2026-11-15 (2)" for a second count that day
+        if (!job.person) { GH.queue = GH.queue.filter(j => j !== job); continue; }   // old format from a test build
+        if (!job.stem) {   // "2026-11-09 23-30", or "2026-11-09 23-30 (2)" if that minute is already taken
           for (let n = 1; n < 50; n++) {
             const name = n === 1 ? job.base : `${job.base} (${n})`;
-            const r = await gh(`/contents/${ghPath([GH.dir, name])}`);
-            if (r.status === 404) { job.folder = name; break; }
+            const r = await gh(`/contents/${ghPath([GH.dir, job.person, name + ".md"])}`);
+            if (r.status === 404) { job.stem = name; break; }
             if (!r.ok) throw new Error("GitHub " + r.status);
           }
-          if (!job.folder) throw new Error("no free folder name");
+          if (!job.stem) throw new Error("no free file name");
           ghSave();
         }
-        for (const [file, text] of Object.entries(job.files)) {
-          if (job.done.includes(file)) continue;
-          const r = await gh(`/contents/${ghPath([GH.dir, job.folder, file])}`, { method: "PUT", body: JSON.stringify({ message: job.title, content: b64(text) }) });
+        for (const [ext, text] of Object.entries(job.files)) {
+          if (job.done.includes(ext)) continue;
+          const r = await gh(`/contents/${ghPath([GH.dir, job.person, job.stem + ext])}`, { method: "PUT", body: JSON.stringify({ message: job.title, content: b64(text) }) });
           if (!r.ok) throw new Error("GitHub " + r.status);
-          job.done.push(file); ghSave();
+          job.done.push(ext); ghSave();
         }
-        GH.queue = GH.queue.filter(j => j !== job); GH.lastSent = { folder: job.folder, at: new Date().toISOString() }; ghSave();
-        toast(`Log saved to GitHub: ${job.folder}`);
+        const where = `${job.person}/${job.stem}`;
+        GH.queue = GH.queue.filter(j => j !== job); GH.lastSent = { folder: where, at: new Date().toISOString() }; ghSave();
+        toast(`Log saved to GitHub: ${where}`);
       }
     } catch (e) { GH.lastError = String(e.message || e); ghSave(); }
     finally { ghBusy = false; if (tab === "setup") renderGhStatus(); }
@@ -782,7 +788,7 @@
   function ghCard() {
     return `<div class="card stack" id="ghCard">
       <h2 style="font-size:20px">GitHub log</h2>
-      <p class="muted">After every submitted count, a folder named <b>cook name - date</b> is made in your GitHub repo, with the count, the changes since the last count, and what was entered step by step. Set this up once on each phone that submits counts. It stays on this phone only.</p>
+      <p class="muted">After every submitted count, a file named by <b>date and time</b> is saved in GitHub, in a folder for each cook (e.g. <b>Abhi/2026-11-09 23-30</b>), with the count, the changes since the last count, and what was entered step by step. Set this up once on each phone that submits counts. It stays on this phone only.</p>
       <label>Repository (owner/name)<input id="ghRepo" value="${esc(GH.repo)}" placeholder="e.g. your-name/protein-count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Folder in the repo<input id="ghDir" value="${esc(GH.dir)}" placeholder="count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Access token<input id="ghToken" type="password" value="" placeholder="${GH.token ? "Saved. Type a new one to change it" : "github_pat_…"}" autocomplete="off" spellcheck="false"></label>
