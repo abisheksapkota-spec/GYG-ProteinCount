@@ -506,13 +506,22 @@
     return q ? `${q} × ${fmtW(w)} kg = <b>${f2(q * w)} kg</b>` : `${fmtW(w)} kg each`;
   }
   const fmtW = w => String(r2(w));
+  // Step-by-step log of what was entered, saved with the count (quick retyping of one box is merged into one line).
+  function logStep(text, key, from) {
+    if (!S.count) return;
+    const log = S.count.log = S.count.log || [], last = log[log.length - 1], now = new Date().toISOString();
+    if (key && last && last.key === key && Date.now() - Date.parse(last.at) < 120000) { last.at = now; last.text = text(last.from); return; }
+    log.push({ at: now, key: key || null, from, text: text(from) });
+  }
   function setUnit(pid, k, raw, fromInput) {
     const p = cfg.proteins.find(x => x.id === pid), u = UNITS.find(x => x.k === k), c = pc(pid);
     const row = document.querySelector(`.c-row[data-k="${k}"]`), err = row?.querySelector("[data-uerr]");
     const v = typeof raw === "number" ? { value: raw } : parseQty(u, raw);
     if (v.error) { if (err) { err.hidden = false; err.textContent = v.error; } return; }
     if (err) err.hidden = true;
+    const old = c.units[k];
     if (v.empty) delete c.units[k]; else { c.units[k] = v.value; c.zero = false; }
+    if (old !== c.units[k]) { const now = c.units[k]; logStep(f => `${p.name}: ${u.label.toLowerCase()} ${f ?? "–"} → ${now ?? "cleared"}`, pid + ":" + k, old); }
     save();
     if (row) {
       row.querySelector("[data-info]").innerHTML = unitInfo(p, u);
@@ -553,10 +562,13 @@
     const list = pc(pid).entries;
     if (S.view.edit) {
       const e = list.find(x => x.id === S.view.edit);
+      const before = f2(net(e));
       Object.assign(e, { type: d.type, gross: v.gross, tare: v.tare, tareName: v.tareName });
+      logStep(() => `${cfg.proteins.find(x => x.id === pid).name}: changed a weighed container ${before} → ${f2(net(e))} kg ${TYPES[d.type].toLowerCase()}`);
       S.view.edit = null; toast(`Container updated · ${f2(net(e))} kg`);
     } else {
       list.push({ id: uid(), type: d.type, gross: v.gross, tare: v.tare, tareName: v.tareName, at: new Date().toISOString() });
+      logStep(() => `${cfg.proteins.find(x => x.id === pid).name}: weighed ${f2(v.gross)}${v.tare ? " − " + f2(v.tare) : ""} = ${f2(v.gross - v.tare)} kg ${TYPES[d.type].toLowerCase()}`);
       toast(`Added ${f2(v.gross - v.tare)} kg ${TYPES[d.type].toLowerCase()}`);
     }
     pc(pid).zero = false; d.gross = "";
@@ -605,7 +617,8 @@
                units: UNITS.filter(u => c?.units?.[u.k] !== undefined && u.k in p.units).map(u => ({ k: u.k, qty: c.units[u.k], each: p.units[u.k] })) };
     });
     return { id: S.count.id, v: 4, startedAt: S.count.startedAt, submittedAt: new Date().toISOString(),
-             staffName: S.count.staffName, by: myId || null, notes: S.count.notes || "", total: grand(), items };
+             staffName: S.count.staffName, by: myId || null, notes: S.count.notes || "", total: grand(), items,
+             log: (S.count.log || []).map(x => ({ at: x.at, text: x.text })) };
   }
   function reportText(h) {
     if (h.v !== 4) return legacyText(h);
@@ -642,9 +655,11 @@
     const missing = cfg.proteins.filter(p => !isDone(p.id)).map(p => p.name);
     if (missing.length && !(await ask(`These proteins are not counted:\n\n${missing.join("\n")}\n\nSubmit anyway?`, { ok: "Submit anyway", cancel: "Go back" }))) return;
     const rec = buildRecord();
+    ghQueue(rec);
     S.history.unshift(rec); S.pending.push(rec.id);
     S.staffName = rec.staffName; S.count = null; S.view = { screen: "done", id: rec.id, status: "sending" };
     save(); render(); window.scrollTo(0, 0);
+    ghFlush();
     const ok = await upload(rec);
     if (S.view.screen === "done" && S.view.id === rec.id) { S.view.status = ok ? "sent" : "local"; save(); render(); }
   }
@@ -656,8 +671,154 @@
     } catch { return false; }
   }
   async function retryPending() {
+    ghFlush();
     for (const id of [...S.pending]) { const rec = S.history.find(h => h.id === id); if (!rec) { S.pending = S.pending.filter(x => x !== id); continue; } await upload(rec); }
     save(); if (tab === "prev") renderPrev();
+  }
+
+  // ---------- GITHUB LOG ----------
+  // After every submitted count, a folder "<cook> - <date>" is made in a GitHub repo with README.md
+  // (the count, changes since the last count, and what was entered step by step) and count.json.
+  // The repo and token are kept on this phone only; they are never put in the shared page.
+  const GH_KEY = "npc.github";
+  let GH = loadKey(GH_KEY) || { repo: "", dir: "count-logs", token: "", queue: [] };
+  GH.queue = GH.queue || [];
+  const ghSave = () => { try { localStorage.setItem(GH_KEY, JSON.stringify(GH)); } catch {} };
+  const ghReady = () => !!(GH.repo && GH.token);
+  const ymd = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+  const safeName = n => (String(n || "").replace(/[\\/:*?"<>|#%\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40)) || "Unknown";
+  const md = t => String(t ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  const sign = d => d === 0 ? "±0.00" : (d > 0 ? "▲ +" : "▼ ") + f2(d);
+
+  function ghReadme(rec, prev) {
+    const prevItem = pid => prev?.items?.find(i => i.pid === pid);
+    const counted = rec.items.filter(i => i.counted).length;
+    const detail = i => {
+      if (!i.counted) return "Not counted";
+      if (i.zero) return "None in stock";
+      const parts = (i.units || []).filter(x => x.qty > 0).map(x => { const u = UNITS.find(y => y.k === x.k); return `${x.qty} ${unitWord(u, x.qty)} × ${fmtW(x.each)} kg`; });
+      if (i.entries.length) parts.push(`${i.entries.length} weighed`);
+      return parts.join(" + ") || "0";
+    };
+    const change = i => { const p = prevItem(i.pid); return i.counted && p?.counted ? sign(r2(i.total - p.total)) : ""; };
+    const L = [
+      `# Closing count: ${md(rec.staffName)} - ${dayFmt(rec.submittedAt)}`, "",
+      "| | |", "|---|---|",
+      `| Counted by | ${md(rec.staffName)} |`,
+      `| Started | ${dayFmt(rec.startedAt)}, ${timeFmt(rec.startedAt)} |`,
+      `| Submitted | ${dayFmt(rec.submittedAt)}, ${timeFmt(rec.submittedAt)} |`,
+      `| Total | **${f2(rec.total)} kg** |`,
+      `| Items counted | ${counted} of ${rec.items.length}${counted < rec.items.length ? " ⚠" : ""} |`, "",
+      "## Protein count", "",
+      "| Item | Count | Prepared kg | Unopened kg | Total kg | Change since last count |",
+      "|---|---|---:|---:|---:|---:|",
+      ...rec.items.map(i => `| ${md(i.name)} | ${md(detail(i))} | ${i.counted ? f2(i.prepared) : ""} | ${i.counted ? f2(i.unopened) : ""} | ${i.counted ? "**" + f2(i.total) + "**" : "Missing"} | ${change(i)} |`),
+      `| **Total** | | ${f2(rec.items.reduce((a, i) => a + i.prepared, 0))} | ${f2(rec.items.reduce((a, i) => a + i.unopened, 0))} | **${f2(rec.total)}** | ${prev ? sign(r2(rec.total - prev.total)) : ""} |`, "",
+      "## Changes since the last count", ""];
+    if (!prev) L.push("This is the first saved count, so there is nothing to compare with yet.");
+    else {
+      L.push(`Compared with ${md(nameOf(prev))}'s count on ${shortFmt(prev.submittedAt)} (${f2(prev.total)} kg).`, "");
+      L.push(`- **Total:** ${f2(prev.total)} → ${f2(rec.total)} kg (${sign(r2(rec.total - prev.total))})`);
+      rec.items.forEach(i => {
+        const p = prevItem(i.pid);
+        if (!p) { if (i.counted) L.push(`- **${md(i.name)}:** new item, ${f2(i.total)} kg`); return; }
+        if (!i.counted && p.counted) { L.push(`- **${md(i.name)}:** not counted this time (was ${f2(p.total)} kg)`); return; }
+        if (i.counted && !p.counted) { L.push(`- **${md(i.name)}:** ${f2(i.total)} kg (not counted last time)`); return; }
+        if (i.counted && r2(i.total - p.total) !== 0) L.push(`- **${md(i.name)}:** ${f2(p.total)} → ${f2(i.total)} kg (${sign(r2(i.total - p.total))})`);
+      });
+      prev.items.filter(p => !rec.items.some(i => i.pid === p.pid)).forEach(p => L.push(`- **${md(p.name)}:** no longer on the list (was ${f2(p.total)} kg)`));
+      if (L[L.length - 1].startsWith("- **Total:**")) L.push("- No item changed.");
+    }
+    L.push("", "## What was entered (step by step)", "");
+    if (rec.log?.length) rec.log.forEach(x => L.push(`- ${timeFmt(x.at)} · ${md(x.text)}`));
+    else L.push("No steps recorded.");
+    L.push(`- ${timeFmt(rec.submittedAt)} · Submitted, ${f2(rec.total)} kg total`);
+    L.push("", "## Notes", "", rec.notes ? rec.notes : "No notes.", "");
+    return L.join("\n");
+  }
+  function ghQueue(rec) {
+    if (!ghReady()) return;
+    const prev = allPrevious().filter(h => h.v === 4 && h.id !== rec.id && (h.submittedAt || "") < rec.submittedAt)[0] || null;
+    GH.queue.push({ id: rec.id, base: `${safeName(rec.staffName)} - ${ymd(rec.submittedAt)}`, folder: null, done: [],
+      title: `Closing count: ${safeName(rec.staffName)} - ${ymd(rec.submittedAt)} (${f2(rec.total)} kg)`,
+      files: { "README.md": ghReadme(rec, prev), "count.json": JSON.stringify({ ...rec, comparedWith: prev ? prev.id : null }, null, 2) + "\n" } });
+    ghSave();
+  }
+  const b64 = str => { const bytes = new TextEncoder().encode(str); let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); };
+  const ghPath = parts => parts.filter(Boolean).flatMap(x => String(x).split("/")).filter(Boolean).map(encodeURIComponent).join("/");
+  async function gh(path, opts = {}) {
+    const res = await fetch(`https://api.github.com/repos/${GH.repo}${path}`, { ...opts,
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${GH.token}`, "X-GitHub-Api-Version": "2022-11-28", ...(opts.body ? { "Content-Type": "application/json" } : {}) } });
+    return res;
+  }
+  let ghBusy = false;
+  async function ghFlush() {
+    if (ghBusy || !ghReady() || !GH.queue.length || navigator.onLine === false) return;
+    ghBusy = true;
+    try {
+      for (const job of [...GH.queue]) {
+        if (!job.folder) {   // "Sam - 2026-11-15", or "Sam - 2026-11-15 (2)" for a second count that day
+          for (let n = 1; n < 50; n++) {
+            const name = n === 1 ? job.base : `${job.base} (${n})`;
+            const r = await gh(`/contents/${ghPath([GH.dir, name])}`);
+            if (r.status === 404) { job.folder = name; break; }
+            if (!r.ok) throw new Error("GitHub " + r.status);
+          }
+          if (!job.folder) throw new Error("no free folder name");
+          ghSave();
+        }
+        for (const [file, text] of Object.entries(job.files)) {
+          if (job.done.includes(file)) continue;
+          const r = await gh(`/contents/${ghPath([GH.dir, job.folder, file])}`, { method: "PUT", body: JSON.stringify({ message: job.title, content: b64(text) }) });
+          if (!r.ok) throw new Error("GitHub " + r.status);
+          job.done.push(file); ghSave();
+        }
+        GH.queue = GH.queue.filter(j => j !== job); GH.lastSent = { folder: job.folder, at: new Date().toISOString() }; ghSave();
+        toast(`Log saved to GitHub: ${job.folder}`);
+      }
+    } catch (e) { GH.lastError = String(e.message || e); ghSave(); }
+    finally { ghBusy = false; if (tab === "setup") renderGhStatus(); }
+  }
+  function ghCard() {
+    return `<div class="card stack" id="ghCard">
+      <h2 style="font-size:20px">GitHub log</h2>
+      <p class="muted">After every submitted count, a folder named <b>cook name - date</b> is made in your GitHub repo, with the count, the changes since the last count, and what was entered step by step. Set this up once on each phone that submits counts. It stays on this phone only.</p>
+      <label>Repository (owner/name)<input id="ghRepo" value="${esc(GH.repo)}" placeholder="e.g. your-name/protein-count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+      <label>Folder in the repo<input id="ghDir" value="${esc(GH.dir)}" placeholder="count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+      <label>Access token<input id="ghToken" type="password" value="" placeholder="${GH.token ? "Saved. Type a new one to change it" : "github_pat_…"}" autocomplete="off" spellcheck="false"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" data-act="ghSave">Save and test</button>
+        <button class="btn" data-act="ghSend">Send waiting logs</button>
+        ${GH.token ? `<button class="btn danger" data-act="ghForget">Remove from this phone</button>` : ""}
+      </div>
+      <p class="muted" id="ghStatus"></p>
+    </div>`;
+  }
+  function renderGhStatus(msg) {
+    const el = $("ghStatus"); if (!el) return;
+    const n = GH.queue.length;
+    el.innerHTML = msg || [
+      ghReady() ? "✅ Set up on this phone." : "Not set up on this phone.",
+      n ? `${n} log${n === 1 ? "" : "s"} waiting to be sent.` : "",
+      GH.lastSent ? `Last log: <b>${esc(GH.lastSent.folder)}</b> (${esc(shortFmt(GH.lastSent.at))}).` : "",
+      n && GH.lastError ? `<span style="color:var(--chilli)">Last try failed: ${esc(GH.lastError)}</span>` : ""].filter(Boolean).join(" ");
+  }
+  async function ghSetup() {
+    const repo = ($("ghRepo").value || "").trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+    const dir = ($("ghDir").value || "").trim().replace(/^\/+|\/+$/g, "");
+    const token = ($("ghToken").value || "").trim() || GH.token;
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { renderGhStatus(`<span style="color:var(--chilli)">Type the repository as owner/name.</span>`); return; }
+    if (!token) { renderGhStatus(`<span style="color:var(--chilli)">Paste the access token.</span>`); return; }
+    renderGhStatus("Checking…");
+    const old = { ...GH }; Object.assign(GH, { repo, dir, token });
+    let r; try { r = await gh(""); } catch { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">Couldn't reach GitHub. Check the internet and try again.</span>`); return; }
+    if (r.status === 401) { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">GitHub didn't accept the token. Check it, or make a new one.</span>`); return; }
+    if (r.status === 404) { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">Repository not found, or the token can't see it.</span>`); return; }
+    const info = await r.json().catch(() => ({}));
+    if (!r.ok || info.permissions?.push === false) { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">The token can read the repo but can't save files. Give it "Contents: Read and write".</span>`); return; }
+    ghSave(); $("ghToken").value = "";
+    toast("GitHub log set up on this phone");
+    renderSetup(); ghFlush();
   }
 
   // ---------- DONE ----------
@@ -729,6 +890,7 @@
           <button class="icon del" data-act="tdel" aria-label="Remove ${esc(t.name)}">🗑</button></div>`).join("") || `<p class="muted">No containers yet.</p>`}
         <button class="btn" data-act="tadd">+ Add container</button>
       </div>
+      ${ghCard()}
       <div class="card stack" style="order:-1">
         <h2>Weights</h2>
         <p class="muted">The weight in kg of <b>one</b> of each. These are saved and used for every count, so only change them when a box or container size changes. Tap <b>Save weights</b> when done.</p>
@@ -741,6 +903,7 @@
         <button class="btn" data-act="padd">+ Add item</button>
         <p class="muted">Add anything you want counted, like tomatoes. Tick how it's counted, then type the weight of one.</p>
       </div>`;
+    renderGhStatus();
     setBar(`<button class="btn shrink" data-act="setupUndo"${setupDirty ? "" : " disabled"}>Undo</button><button class="btn primary" data-act="setupSave"${setupDirty ? "" : " disabled"}>${setupDirty ? "Save weights" : "Weights saved"}</button>`);
   }
   function focusWeights(pid) {
@@ -815,10 +978,11 @@
     else if (act === "del") {
       const list = pc(S.view.pid).entries, i = list.findIndex(x => x.id === el.dataset.eid), [gone] = list.splice(i, 1), pid = S.view.pid;
       if (S.view.edit === gone.id) { S.view.edit = null; draft().gross = ""; }
+      logStep(() => `${cfg.proteins.find(x => x.id === pid).name}: deleted a weighed container (${f2(net(gone))} kg)`);
       save(); renderProtein(pid);
       toast(`Deleted ${f2(net(gone))} kg`, { action: "Undo", onAction: () => { pc(pid).entries.splice(i, 0, gone); save(); if (S.view.pid === pid) renderProtein(pid); } });
     }
-    else if (act === "zero") { const c = pc(S.view.pid); c.zero = !c.zero; save(); renderProtein(S.view.pid); if (c.zero) toast("Marked as none in stock"); }
+    else if (act === "zero") { const c = pc(S.view.pid); c.zero = !c.zero; logStep(() => `${cfg.proteins.find(x => x.id === S.view.pid).name}: ${c.zero ? "marked none in stock" : "unmarked none in stock"}`); save(); renderProtein(S.view.pid); if (c.zero) toast("Marked as none in stock"); }
     else if (act === "next") {
       const pid = S.view.pid, d = draft();
       if (!(await keepTyped())) return;
@@ -844,6 +1008,12 @@
     }
     else if (act === "setupUndo") { setupDraft = null; setupDirty = false; renderSetup(); }
     else if (act === "setupSave") saveSetup();
+    else if (act === "ghSave") ghSetup();
+    else if (act === "ghSend") { if (!ghReady()) renderGhStatus("Set it up first."); else { renderGhStatus("Sending…"); GH.lastError = ""; ghFlush(); } }
+    else if (act === "ghForget") {
+      if (!(await ask("Remove the GitHub token from this phone? Counts will stop being logged to GitHub from this phone.", { ok: "Remove" }))) return;
+      GH.token = ""; ghSave(); renderSetup();
+    }
   });
 
   document.addEventListener("input", e => {
@@ -900,6 +1070,8 @@
   });
 
   setInterval(() => { pruneOld(); if (tab === "prev") render(); }, 60 * 60 * 1000);
+  setInterval(ghFlush, 60 * 1000);
+  ghFlush();
   render();
 })();
 </script>
