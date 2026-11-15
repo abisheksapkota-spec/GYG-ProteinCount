@@ -670,8 +670,10 @@
   //   count-logs/2026-11/2026-11-09 23-30 Count - Abhi.md   (+ .json with the same count as data)
   // The repo and token are kept on this phone only; they are never put in the shared page.
   const GH_KEY = "npc.github";
-  const GH_DEFAULT_REPO = "abisheksapkota-spec/GYG-ProteinCount-logs";   // private repo, kept apart from the app
-  let GH = loadKey(GH_KEY) || { repo: GH_DEFAULT_REPO, dir: "count-logs", token: "", queue: [] };
+  // Logs go to a PRIVATE repo. The app's own repo is public, so it is never used for logs.
+  const APP_REPO = "abisheksapkota-spec/gyg-proteincount";
+  let GH = loadKey(GH_KEY) || { repo: "", dir: "count-logs", token: "", queue: [] };
+  if ((GH.repo || "").toLowerCase() === APP_REPO) { GH.repo = ""; GH.needPrivate = true; }   // phones set up before: waiting logs stay until a private repo is set
   GH.queue = GH.queue || [];
   const ghSave = () => { try { localStorage.setItem(GH_KEY, JSON.stringify(GH)); } catch {} };
   const ghReady = () => !!(GH.repo && GH.token);
@@ -808,7 +810,8 @@
     return `<div class="card stack" id="ghCard">
       <h2 style="font-size:20px">GitHub log</h2>
       <p class="muted">Every submitted count and every weight change is saved in GitHub, in a folder for each month, named by date, time and name (e.g. <b>2026-11/2026-11-09 23-30 Count - Abhi</b>). Each count shows the change since the last count and any weight or item changes. Set this up once on each phone that submits counts. It stays on this phone only.</p>
-      <label>Repository (owner/name)<input id="ghRepo" value="${esc(GH.repo || GH_DEFAULT_REPO)}" placeholder="owner/name" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+      <p class="muted">Use your <b>private</b> logs repo, not the app's repo, so only you can read the counts.</p>
+      <label>Private repository (owner/name)<input id="ghRepo" value="${esc(GH.repo)}" placeholder="your-name/your-private-logs-repo" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Folder in the repo<input id="ghDir" value="${esc(GH.dir)}" placeholder="count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Access token<input id="ghToken" type="password" value="" placeholder="${GH.token ? "Saved. Type a new one to change it" : "github_pat_…"}" autocomplete="off" spellcheck="false"></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -823,7 +826,8 @@
     const el = $("ghStatus"); if (!el) return;
     const n = GH.queue.length;
     el.innerHTML = msg || [
-      ghReady() ? "✅ Set up on this phone." : "Not set up on this phone.",
+      ghReady() ? `✅ Set up on this phone${GH.isPrivate === false ? "" : " (private repo)"}.` : (GH.needPrivate ? `<span style="color:var(--chilli)">Logs moved to a private repo. Type your private repo name and tap Save and test.</span>` : "Not set up on this phone."),
+      ghReady() && GH.isPrivate === false ? `<span style="color:var(--chilli)">⚠ This repo is public: anyone can read the counts.</span>` : "",
       n ? `${n} log${n === 1 ? "" : "s"} waiting to be sent.` : "",
       GH.lastSent ? `Last log: <b>${esc(GH.lastSent.folder)}</b> (${esc(shortFmt(GH.lastSent.at))}).` : "",
       n && GH.lastError ? `<span style="color:var(--chilli)">Last try failed: ${esc(GH.lastError)}</span>` : ""].filter(Boolean).join(" ");
@@ -834,6 +838,7 @@
     const token = ($("ghToken").value || "").trim() || GH.token;
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { renderGhStatus(`<span style="color:var(--chilli)">Type the repository as owner/name.</span>`); return; }
     if (!token) { renderGhStatus(`<span style="color:var(--chilli)">Paste the access token.</span>`); return; }
+    if (repo.toLowerCase() === APP_REPO) { renderGhStatus(`<span style="color:var(--chilli)">That's the app's public repo. Type your private logs repo instead.</span>`); return; }
     renderGhStatus("Checking…");
     const old = { ...GH }; Object.assign(GH, { repo, dir, token });
     let r; try { r = await gh(""); } catch { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">Couldn't reach GitHub. Check the internet and try again.</span>`); return; }
@@ -841,6 +846,7 @@
     if (r.status === 404) { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">Repository not found, or the token can't see it.</span>`); return; }
     const info = await r.json().catch(() => ({}));
     if (!r.ok || info.permissions?.push === false) { Object.assign(GH, old); renderGhStatus(`<span style="color:var(--chilli)">The token can read the repo but can't save files. Give it "Contents: Read and write".</span>`); return; }
+    GH.isPrivate = info.private !== false; GH.needPrivate = false;
     ghSave(); $("ghToken").value = "";
     toast("GitHub log set up on this phone");
     renderSetup(); ghFlush();
