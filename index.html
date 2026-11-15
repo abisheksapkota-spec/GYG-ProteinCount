@@ -670,7 +670,7 @@
   //   count-logs/2026-11/2026-11-09 23-30 Count - Abhi.md   (+ .json with the same count as data)
   // The repo and token are kept on this phone only; they are never put in the shared page.
   const GH_KEY = "npc.github";
-  const GH_DEFAULT_REPO = "abisheksapkota-spec/GYG-ProteinCount";
+  const GH_DEFAULT_REPO = "abisheksapkota-spec/GYG-ProteinCount-logs";   // private repo, kept apart from the app
   let GH = loadKey(GH_KEY) || { repo: GH_DEFAULT_REPO, dir: "count-logs", token: "", queue: [] };
   GH.queue = GH.queue || [];
   const ghSave = () => { try { localStorage.setItem(GH_KEY, JSON.stringify(GH)); } catch {} };
