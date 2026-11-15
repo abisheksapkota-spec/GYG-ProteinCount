@@ -670,7 +670,8 @@
   //   count-logs/2026-11/2026-11-09 23-30 Count - Abhi.md   (+ .json with the same count as data)
   // The repo and token are kept on this phone only; they are never put in the shared page.
   const GH_KEY = "npc.github";
-  let GH = loadKey(GH_KEY) || { repo: "", dir: "count-logs", token: "", queue: [] };
+  const GH_DEFAULT_REPO = "abisheksapkota-spec/GYG-ProteinCount";
+  let GH = loadKey(GH_KEY) || { repo: GH_DEFAULT_REPO, dir: "count-logs", token: "", queue: [] };
   GH.queue = GH.queue || [];
   const ghSave = () => { try { localStorage.setItem(GH_KEY, JSON.stringify(GH)); } catch {} };
   const ghReady = () => !!(GH.repo && GH.token);
@@ -792,7 +793,7 @@
         }
         for (const [ext, text] of Object.entries(job.files)) {
           if (job.done.includes(ext)) continue;
-          const r = await gh(`/contents/${ghPath([GH.dir, job.month, job.stem + ext])}`, { method: "PUT", body: JSON.stringify({ message: job.title, content: b64(text) }) });
+          const r = await gh(`/contents/${ghPath([GH.dir, job.month, job.stem + ext])}`, { method: "PUT", body: JSON.stringify({ message: job.title + " [skip ci]", content: b64(text) }) });
           if (!r.ok) throw new Error("GitHub " + r.status);
           job.done.push(ext); ghSave();
         }
@@ -807,7 +808,7 @@
     return `<div class="card stack" id="ghCard">
       <h2 style="font-size:20px">GitHub log</h2>
       <p class="muted">Every submitted count and every weight change is saved in GitHub, in a folder for each month, named by date, time and name (e.g. <b>2026-11/2026-11-09 23-30 Count - Abhi</b>). Each count shows the change since the last count and any weight or item changes. Set this up once on each phone that submits counts. It stays on this phone only.</p>
-      <label>Repository (owner/name)<input id="ghRepo" value="${esc(GH.repo)}" placeholder="e.g. your-name/protein-count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+      <label>Repository (owner/name)<input id="ghRepo" value="${esc(GH.repo || GH_DEFAULT_REPO)}" placeholder="owner/name" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Folder in the repo<input id="ghDir" value="${esc(GH.dir)}" placeholder="count-logs" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
       <label>Access token<input id="ghToken" type="password" value="" placeholder="${GH.token ? "Saved. Type a new one to change it" : "github_pat_…"}" autocomplete="off" spellcheck="false"></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
