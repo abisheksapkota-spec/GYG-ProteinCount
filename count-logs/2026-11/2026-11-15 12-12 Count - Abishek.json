@@ -1,0 +1,268 @@
+{
+  "id": "mwc1af2pwm7tk",
+  "v": 4,
+  "submittedAt": "2026-11-15T01:12:16.964Z",
+  "staffName": "abishek",
+  "notes": "testing logs ",
+  "total": 329.5,
+  "items": [
+    {
+      "pid": "chk",
+      "name": "Chicken",
+      "counted": true,
+      "zero": false,
+      "prepared": 26.25,
+      "unopened": 22.5,
+      "total": 48.75,
+      "entries": [],
+      "units": [
+        {
+          "k": "prep",
+          "qty": 3.5,
+          "each": 7.5
+        },
+        {
+          "k": "box",
+          "qty": 3,
+          "each": 7.5
+        }
+      ]
+    },
+    {
+      "pid": "gbf",
+      "name": "Ground Beef",
+      "counted": true,
+      "zero": false,
+      "prepared": 9,
+      "unopened": 34,
+      "total": 43,
+      "entries": [],
+      "units": [
+        {
+          "k": "prep",
+          "qty": 1.5,
+          "each": 6
+        },
+        {
+          "k": "pack",
+          "qty": 1,
+          "each": 2
+        },
+        {
+          "k": "box",
+          "qty": 2,
+          "each": 16
+        }
+      ]
+    },
+    {
+      "pid": "bri",
+      "name": "Brisket",
+      "counted": true,
+      "zero": false,
+      "prepared": 6,
+      "unopened": 18,
+      "total": 24,
+      "entries": [],
+      "units": [
+        {
+          "k": "prep",
+          "qty": 1,
+          "each": 6
+        },
+        {
+          "k": "pack",
+          "qty": 1,
+          "each": 2
+        },
+        {
+          "k": "box",
+          "qty": 1,
+          "each": 16
+        }
+      ]
+    },
+    {
+      "pid": "rib",
+      "name": "BBQ Beef Rib",
+      "counted": true,
+      "zero": false,
+      "prepared": 0,
+      "unopened": 42,
+      "total": 42,
+      "entries": [],
+      "units": [
+        {
+          "k": "pack",
+          "qty": 5,
+          "each": 2
+        },
+        {
+          "k": "box",
+          "qty": 2,
+          "each": 16
+        }
+      ]
+    },
+    {
+      "pid": "pp",
+      "name": "Pulled Pork",
+      "counted": true,
+      "zero": false,
+      "prepared": 15,
+      "unopened": 0,
+      "total": 15,
+      "entries": [],
+      "units": [
+        {
+          "k": "prep",
+          "qty": 2.5,
+          "each": 6
+        }
+      ]
+    },
+    {
+      "pid": "avo",
+      "name": "Avocado",
+      "counted": true,
+      "zero": false,
+      "prepared": 0,
+      "unopened": 20,
+      "total": 20,
+      "entries": [],
+      "units": [
+        {
+          "k": "box",
+          "qty": 2,
+          "each": 10
+        }
+      ]
+    },
+    {
+      "pid": "guac",
+      "name": "Guac",
+      "counted": true,
+      "zero": false,
+      "prepared": 6.75,
+      "unopened": 0,
+      "total": 6.75,
+      "entries": [],
+      "units": [
+        {
+          "k": "prep",
+          "qty": 1.5,
+          "each": 4.5
+        }
+      ]
+    },
+    {
+      "pid": "fries",
+      "name": "Fries",
+      "counted": true,
+      "zero": false,
+      "prepared": 0,
+      "unopened": 90,
+      "total": 90,
+      "entries": [],
+      "units": [
+        {
+          "k": "box",
+          "qty": 6,
+          "each": 15
+        }
+      ]
+    },
+    {
+      "pid": "rice",
+      "name": "Rice",
+      "counted": true,
+      "zero": false,
+      "prepared": 0,
+      "unopened": 40,
+      "total": 40,
+      "entries": [],
+      "units": [
+        {
+          "k": "bag",
+          "qty": 4,
+          "each": 10
+        }
+      ]
+    }
+  ],
+  "setup": [
+    {
+      "pid": "chk",
+      "name": "Chicken",
+      "units": {
+        "prep": 7.5,
+        "box": 7.5
+      }
+    },
+    {
+      "pid": "gbf",
+      "name": "Ground Beef",
+      "units": {
+        "prep": 6,
+        "pack": 2,
+        "box": 16
+      }
+    },
+    {
+      "pid": "bri",
+      "name": "Brisket",
+      "units": {
+        "prep": 6,
+        "pack": 2,
+        "box": 16
+      }
+    },
+    {
+      "pid": "rib",
+      "name": "BBQ Beef Rib",
+      "units": {
+        "prep": 6,
+        "pack": 2,
+        "box": 16
+      }
+    },
+    {
+      "pid": "pp",
+      "name": "Pulled Pork",
+      "units": {
+        "prep": 6,
+        "pack": 2,
+        "box": 16
+      }
+    },
+    {
+      "pid": "avo",
+      "name": "Avocado",
+      "units": {
+        "box": 10
+      }
+    },
+    {
+      "pid": "guac",
+      "name": "Guac",
+      "units": {
+        "prep": 4.5
+      }
+    },
+    {
+      "pid": "fries",
+      "name": "Fries",
+      "units": {
+        "box": 15
+      }
+    },
+    {
+      "pid": "rice",
+      "name": "Rice",
+      "units": {
+        "bag": 10
+      }
+    }
+  ],
+  "comparedWith": null
+}
